@@ -1,0 +1,8 @@
+{
+  "name": "Saghi Abyar — Fine Art & Persian Tar Music",
+  "description": "Official art archive, fine paintings, and classical Persian Tar music performances by Saghi Abyar (ساقی آبیار). Featuring bespoke artwork commissions and acquisition inquiries.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

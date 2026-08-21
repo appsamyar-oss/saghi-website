@@ -1,0 +1,72 @@
+{
+  "entities": {
+    "Artwork": {
+      "title": "Artwork",
+      "description": "Represents an artwork in the gallery",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string", "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "category": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "artist": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["title", "description", "category", "imageUrl", "artist", "createdAt"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Artwork category",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "labelEn": { "type": "string" },
+        "labelFa": { "type": "string" }
+      },
+      "required": ["labelEn", "labelFa"]
+    },
+    "Config": {
+      "title": "Site Config",
+      "description": "Global website configuration",
+      "type": "object",
+      "properties": {
+        "atelierNameEn": { "type": "string" },
+        "atelierNameFa": { "type": "string" }
+      }
+    },
+    "Inquiry": {
+      "title": "Commission Inquiry",
+      "description": "User inquiries",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "message": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["name", "email", "message", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/artworks/{artworkId}": {
+      "schema": { "$ref": "#/entities/Artwork" },
+      "description": "Gallery artworks"
+    },
+    "/categories/{categoryId}": {
+      "schema": { "$ref": "#/entities/Category" },
+      "description": "Gallery categories"
+    },
+    "/config/{configId}": {
+      "schema": { "$ref": "#/entities/Config" },
+      "description": "Global config"
+    },
+    "/inquiries/{inquiryId}": {
+      "schema": { "$ref": "#/entities/Inquiry" },
+      "description": "User inquiries"
+    }
+  }
+}

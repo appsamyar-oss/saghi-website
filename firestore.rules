@@ -1,0 +1,86 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+    
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidArtwork(data) {
+      return data.keys().hasAll(['title', 'description', 'category', 'imageUrl', 'artist', 'createdAt']) &&
+             data.title is string && data.title.size() <= 100 &&
+             data.description is string && data.description.size() <= 2000 &&
+             data.category is string && data.category.size() <= 100 &&
+             data.imageUrl is string && data.imageUrl.size() <= 1000 &&
+             data.artist is string && data.artist.size() <= 100 &&
+             data.createdAt is string;
+    }
+
+    function isValidCategory(data) {
+      return data.keys().hasAll(['labelEn', 'labelFa']) &&
+             data.labelEn is string && data.labelEn.size() <= 100 &&
+             data.labelFa is string && data.labelFa.size() <= 100;
+    }
+
+    function isValidConfig(data) {
+      return data.keys().hasAll(['atelierNameEn']) &&
+             data.atelierNameEn is string && data.atelierNameEn.size() <= 100;
+    }
+
+    function isValidInquiry(data) {
+      return data.keys().hasAll(['name', 'email', 'message', 'status', 'createdAt']) &&
+             data.name is string && data.name.size() <= 100 &&
+             data.email is string && data.email.size() <= 100 &&
+             data.message is string && data.message.size() <= 5000 &&
+             data.status is string && data.status.size() <= 50 &&
+             data.createdAt is string;
+    }
+
+    match /artworks/{artworkId} {
+      allow read: if isValidId(artworkId);
+      allow create: if isSignedIn() && isValidId(artworkId) && isValidArtwork(incoming());
+      allow update: if isSignedIn() && isValidId(artworkId) && isValidArtwork(incoming());
+      allow delete: if isSignedIn() && isValidId(artworkId);
+      allow list: if true;
+    }
+
+    match /categories/{categoryId} {
+      allow read: if isValidId(categoryId);
+      allow create: if isSignedIn() && isValidId(categoryId) && isValidCategory(incoming());
+      allow update: if isSignedIn() && isValidId(categoryId) && isValidCategory(incoming());
+      allow delete: if isSignedIn() && isValidId(categoryId);
+      allow list: if true;
+    }
+
+    match /config/{configId} {
+      allow read: if isValidId(configId);
+      allow create: if isSignedIn() && isValidId(configId) && isValidConfig(incoming());
+      allow update: if isSignedIn() && isValidId(configId) && isValidConfig(incoming());
+      allow delete: if isSignedIn() && isValidId(configId);
+      allow list: if true;
+    }
+
+    match /inquiries/{inquiryId} {
+      allow read: if isSignedIn() && isValidId(inquiryId);
+      allow create: if isValidId(inquiryId) && isValidInquiry(incoming());
+      allow update: if isSignedIn() && isValidId(inquiryId) && isValidInquiry(incoming());
+      allow delete: if isSignedIn() && isValidId(inquiryId);
+      allow list: if isSignedIn();
+    }
+  }
+}
