@@ -257,28 +257,41 @@ export const PhotoDetailModal: React.FC<PhotoDetailModalProps> = ({
           {/* Modal Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             {/* Visual / Media Container */}
-            <div className="lg:col-span-7 space-y-4">
-              <div className="relative rounded-2xl overflow-hidden border border-white/15 shadow-2xl bg-black flex items-center justify-center min-h-[260px] max-h-[60vh]">
+            <div className="lg:col-span-7 space-y-4 select-none">
+              <div 
+                className="relative rounded-2xl overflow-hidden border border-white/15 shadow-2xl bg-black flex items-center justify-center min-h-[260px] max-h-[60vh]"
+                onContextMenu={(e) => e.preventDefault()}
+              >
                 {isVideo && artwork.videoUrl ? (
-                  <div className="w-full h-full aspect-video bg-black">
+                  <div className="w-full h-full aspect-video bg-black flex items-center justify-center">
                     <video
                       controls
+                      controlsList="nodownload"
+                      disablePictureInPicture
+                      onContextMenu={(e) => e.preventDefault()}
                       poster={artwork.imageUrl}
                       src={artwork.videoUrl}
                       className="w-full h-full object-contain"
                     />
                   </div>
                 ) : (
-                  <div className="relative w-full h-full flex items-center justify-center group">
+                  <div className="relative w-full h-full flex items-center justify-center group overflow-hidden">
                     <img
                       src={artwork.imageUrl}
                       alt={title}
                       referrerPolicy="no-referrer"
-                      className="w-full h-auto max-h-[58vh] object-contain transition-all duration-500"
+                      onContextMenu={(e) => e.preventDefault()}
+                      className="w-full h-auto max-h-[58vh] object-contain transition-all duration-500 pointer-events-none"
+                    />
+
+                    {/* Anti-Theft Transparent Protective Shield */}
+                    <div 
+                      className="absolute inset-0 z-10" 
+                      onContextMenu={(e) => e.preventDefault()} 
                     />
 
                     {/* Media Type Floating Tag */}
-                    <div className="absolute top-4 left-4 right-4 flex items-center justify-between pointer-events-none">
+                    <div className="absolute top-4 left-4 right-4 flex items-center justify-between pointer-events-none z-20">
                       <span className="px-3 py-1 rounded-full bg-black/80 backdrop-blur-md border border-white/15 text-[10px] font-mono uppercase tracking-widest text-amber-300 flex items-center gap-1.5">
                         {isAudio && <Music className="w-3 h-3 text-amber-400" />}
                         {isVideo && <Film className="w-3 h-3 text-cyan-400" />}

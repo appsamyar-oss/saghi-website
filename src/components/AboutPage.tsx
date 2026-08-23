@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { PageView } from '../types';
-import { Palette, Feather, Music, Sparkles, ShoppingBag, ShieldCheck } from 'lucide-react';
+import { Palette, Feather, Music, Sparkles, ShoppingBag, ShieldCheck, Play } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { SaghiEmblemLogo } from './SaghiEmblemLogo';
 
@@ -13,12 +13,14 @@ export const AboutPage: React.FC<AboutPageProps> = ({ setActiveView }) => {
   const { siteConfig, isFa, t, getLocalized } = useApp();
 
   const disciplineIcons = [Music, Palette, Sparkles, Feather];
+  const artistPortraitUrl = 'https://qf1mwtdvcbajjjdk.public.blob.vercel-storage.com/Art%20Gallery/753205968_17937444480315827_3004804003390789664_n.jpg';
+  const aboutVideoUrl = 'https://qf1mwtdvcbajjjdk.public.blob.vercel-storage.com/Art%20Gallery/%D9%85%D9%86_%D8%B1%D9%86%DA%AF_%D9%88_%D8%B7%D9%86%DB%8C%D9%86_%D8%AA%D8%A7%D8%B1_202608211517.mp4';
 
   return (
-    <main className="min-h-screen bg-black text-white pt-28 pb-32">
+    <main className="min-h-screen bg-black text-white pt-28 pb-32 select-none">
       <div className="container mx-auto px-4 sm:px-6 max-w-7xl">
         {/* Editorial Header with Official Seal */}
-        <header className={`mb-20 ${isFa ? 'text-right' : 'text-left'}`}>
+        <header className={`mb-16 ${isFa ? 'text-right' : 'text-left'}`}>
           <div className="flex items-baseline gap-4">
             <span className="text-amber-400 font-medium text-xs sm:text-sm tracking-widest uppercase font-mono">
               {t.about.headerTag}
@@ -62,9 +64,9 @@ export const AboutPage: React.FC<AboutPageProps> = ({ setActiveView }) => {
         </header>
 
         {/* Story Sections */}
-        <div className="space-y-32">
-          {/* Section 1: Introduction & Artist Statement */}
-          <section className="grid md:grid-cols-12 gap-12 items-center">
+        <div className="space-y-24">
+          {/* Section 1: Introduction & Artist Portrait Statement */}
+          <section className="grid md:grid-cols-12 gap-10 items-center">
             <motion.div
               initial={{ opacity: 0, x: isFa ? 40 : -40 }}
               whileInView={{ opacity: 1, x: 0 }}
@@ -81,7 +83,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({ setActiveView }) => {
               <h2 className={`text-3xl sm:text-4xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-100 via-white to-amber-200 tracking-tight ${
                 isFa ? 'font-vazir font-extrabold text-2xl sm:text-4xl md:text-5xl' : 'font-playfair'
               }`}>
-                {t.about.originTitle}
+                {isFa ? '«من، رنگ و طنین تار»' : 'Me, Color & Resonance of Tar'}
               </h2>
               <p className={`text-white/80 text-base md:text-lg leading-relaxed font-light ${isFa ? 'font-vazir' : ''}`}>
                 {t.about.originBody1}
@@ -90,6 +92,8 @@ export const AboutPage: React.FC<AboutPageProps> = ({ setActiveView }) => {
                 {t.about.originBody2}
               </p>
             </motion.div>
+
+            {/* Artist Portrait Card with Anti-Piracy Shield */}
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               whileInView={{ opacity: 1, scale: 1 }}
@@ -97,18 +101,64 @@ export const AboutPage: React.FC<AboutPageProps> = ({ setActiveView }) => {
               transition={{ duration: 0.8 }}
               className="md:col-span-6 relative group"
             >
-              <div className="absolute inset-0 bg-gradient-to-tr from-amber-500 to-rose-500 rounded-3xl transform rotate-2 blur-sm opacity-25 group-hover:opacity-45 transition-opacity duration-500" />
-              <div className="relative rounded-3xl overflow-hidden border border-white/10 shadow-2xl bg-black p-6 bg-white/5 flex flex-col items-center justify-center text-center">
-                {/* Transparent Master Seal */}
-                <div className="py-4">
-                  <SaghiEmblemLogo variant="transparent" size="hero" glow={true} />
-                </div>
-                <div className="mt-4 flex items-center justify-between w-full text-xs font-mono text-white/50 border-t border-white/10 pt-4">
-                  <span className="text-amber-400 font-bold">SAGHI ABYAR</span>
-                  <span>{isFa ? 'نقاشی • تکنوازی تار' : 'FINE ART & PERSIAN TAR'}</span>
+              <div className="absolute inset-0 bg-gradient-to-tr from-amber-500 to-rose-500 rounded-3xl transform rotate-1 blur-sm opacity-20 group-hover:opacity-40 transition-opacity duration-500" />
+              <div className="relative rounded-3xl overflow-hidden border border-white/15 shadow-2xl bg-zinc-950">
+                <div className="relative aspect-[4/5] sm:aspect-square md:aspect-[4/5] w-full overflow-hidden">
+                  <img
+                    src={artistPortraitUrl}
+                    alt={isFa ? 'ساقی آبیار - استودیو هنر و تار' : 'Saghi Abyar - Fine Art & Tar Studio'}
+                    referrerPolicy="no-referrer"
+                    onContextMenu={(e) => e.preventDefault()}
+                    className="w-full h-full object-cover pointer-events-none transition-transform duration-700 group-hover:scale-105"
+                  />
+                  {/* Anti-Theft Protective Transparent Overlay */}
+                  <div
+                    className="absolute inset-0 z-10 pointer-events-none"
+                    onContextMenu={(e) => e.preventDefault()}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 pointer-events-none z-10" />
+
+                  <div className="absolute bottom-4 left-4 right-4 z-20 flex items-center justify-between text-xs font-mono text-white/90">
+                    <span className="px-3 py-1 rounded-full bg-black/70 backdrop-blur-md border border-white/20 text-amber-300 font-bold">
+                      {isFa ? 'ساقی آبیار' : 'SAGHI ABYAR'}
+                    </span>
+                    <span className="px-3 py-1 rounded-full bg-black/70 backdrop-blur-md border border-white/20 text-white/80">
+                      {isFa ? 'پرتره رسمی استودیو' : 'Studio Portrait'}
+                    </span>
+                  </div>
                 </div>
               </div>
             </motion.div>
+          </section>
+
+          {/* Section: Dedicated Video Feature ("من، رنگ و طنین تار") with Anti-Theft */}
+          <section className="relative rounded-3xl overflow-hidden border border-white/15 bg-gradient-to-b from-zinc-950 to-black p-6 sm:p-10 shadow-2xl">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6 pb-4 border-b border-white/10">
+              <div className={isFa ? 'text-right' : 'text-left'}>
+                <span className="text-amber-400 font-mono text-xs tracking-widest uppercase flex items-center gap-2">
+                  <Music className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{isFa ? 'ویدیو مستند و اجرای تار' : 'Documentary & Tar Solo Performance'}</span>
+                </span>
+                <h3 className={`text-2xl sm:text-3xl font-bold text-white mt-1 ${isFa ? 'font-vazir font-bold text-amber-200' : 'font-playfair'}`}>
+                  {isFa ? 'طنین تار و قلم‌مو: «من، رنگ و طنین تار»' : 'Me, Color & The Resonance of Tar'}
+                </h3>
+              </div>
+              <div className="text-xs font-mono text-white/50">
+                {isFa ? 'کیفیت استودیویی 4K • محافظت شده' : '4K Studio Master • Protected Stream'}
+              </div>
+            </div>
+
+            <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-black aspect-video max-h-[65vh] mx-auto shadow-2xl flex items-center justify-center">
+              <video
+                src={aboutVideoUrl}
+                poster={artistPortraitUrl}
+                controls
+                controlsList="nodownload"
+                disablePictureInPicture
+                onContextMenu={(e) => e.preventDefault()}
+                className="w-full h-full object-contain"
+              />
+            </div>
           </section>
 
           {/* Section 2: Disciplines & Mastery */}
@@ -121,23 +171,31 @@ export const AboutPage: React.FC<AboutPageProps> = ({ setActiveView }) => {
               className="md:col-span-6 order-2 md:order-1 grid grid-cols-2 gap-4 items-center"
             >
               <div className="relative group rounded-3xl overflow-hidden border border-white/10 shadow-lg transform translate-y-6 bg-white/5 p-2">
-                <img
-                  src="https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=800&q=80"
-                  alt="Impasto Oil Painting"
-                  referrerPolicy="no-referrer"
-                  className="w-full h-64 object-cover rounded-2xl grayscale hover:grayscale-0 transition-all duration-700"
-                />
+                <div className="relative h-64 overflow-hidden rounded-2xl">
+                  <img
+                    src="https://qf1mwtdvcbajjjdk.public.blob.vercel-storage.com/Art%20Gallery/603041437_17905300002315827_2091870345981580017_n.jpg"
+                    alt="Minimalist & Cubist Paintings"
+                    referrerPolicy="no-referrer"
+                    onContextMenu={(e) => e.preventDefault()}
+                    className="w-full h-full object-cover pointer-events-none transition-all duration-700 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 z-10 pointer-events-none" onContextMenu={(e) => e.preventDefault()} />
+                </div>
                 <div className="p-2 text-center text-xs font-mono text-amber-300">
                   {isFa ? 'نقاشی مینیمال و کوبیسم' : 'Minimalist & Cubist Paintings'}
                 </div>
               </div>
               <div className="relative group rounded-3xl overflow-hidden border border-white/10 shadow-lg bg-white/5 p-2">
-                <img
-                  src="https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&q=80"
-                  alt="Persian Tar Solo"
-                  referrerPolicy="no-referrer"
-                  className="w-full h-64 object-cover rounded-2xl grayscale hover:grayscale-0 transition-all duration-700"
-                />
+                <div className="relative h-64 overflow-hidden rounded-2xl">
+                  <img
+                    src="https://qf1mwtdvcbajjjdk.public.blob.vercel-storage.com/Art%20Gallery/535370282_18174766348343323_31405188512772339_n.jpg"
+                    alt="Persian Tar Performance"
+                    referrerPolicy="no-referrer"
+                    onContextMenu={(e) => e.preventDefault()}
+                    className="w-full h-full object-cover pointer-events-none transition-all duration-700 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 z-10 pointer-events-none" onContextMenu={(e) => e.preventDefault()} />
+                </div>
                 <div className="p-2 text-center text-xs font-mono text-amber-300">
                   {isFa ? 'تکنوازی و نوازندگی تار' : 'Classical Persian Tar'}
                 </div>
@@ -190,12 +248,13 @@ export const AboutPage: React.FC<AboutPageProps> = ({ setActiveView }) => {
             className={`relative w-full min-h-[380px] rounded-3xl overflow-hidden bg-white/5 border border-white/10 flex items-end p-8 md:p-14 ${isFa ? 'text-right' : 'text-left'}`}
           >
             <img
-              src="https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=1600&q=80"
+              src="https://qf1mwtdvcbajjjdk.public.blob.vercel-storage.com/Art%20Gallery/771822975_17940985809315827_2593308570518048505_n.jpg"
               alt="Studio Life"
               referrerPolicy="no-referrer"
-              className="absolute inset-0 w-full h-full object-cover opacity-35 grayscale hover:grayscale-0 transition-all duration-700"
+              onContextMenu={(e) => e.preventDefault()}
+              className="absolute inset-0 w-full h-full object-cover opacity-35 pointer-events-none transition-all duration-700"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-transparent pointer-events-none" />
             <div className="relative z-10 max-w-2xl space-y-3">
               <h3 className={`text-2xl md:text-3xl lg:text-4xl font-bold tracking-tight text-white leading-relaxed ${
                 isFa ? 'font-vazir font-bold text-amber-200 py-1' : 'font-playfair'

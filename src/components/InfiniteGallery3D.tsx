@@ -424,9 +424,16 @@ export const InfiniteGallery3D: React.FC<InfiniteGallery3DProps> = ({
   const isMusic = activeArtwork.mediaType === 'audio' || activeArtwork.mediaType === 'video';
 
   return (
-    <div className="relative w-full h-[88vh] min-h-[600px] max-h-[920px] bg-black overflow-hidden select-none rounded-3xl border border-white/10 shadow-2xl">
+    <div 
+      className="relative w-full h-[88vh] min-h-[600px] max-h-[920px] bg-black overflow-hidden select-none rounded-3xl border border-white/10 shadow-2xl"
+      onContextMenu={(e) => e.preventDefault()}
+    >
       {/* 3D WebGL Canvas Layer */}
-      <div ref={containerRef} className="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing z-0" />
+      <div 
+        ref={containerRef} 
+        onContextMenu={(e) => e.preventDefault()}
+        className="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing z-0" 
+      />
 
       {/* Floating Status Badge: Monochrome In Motion vs Color Bloom */}
       <div className="absolute top-6 left-6 z-20 pointer-events-none flex items-center gap-3">
@@ -585,14 +592,20 @@ export const InfiniteGallery3D: React.FC<InfiniteGallery3DProps> = ({
               <button
                 key={item.id}
                 onClick={() => scrollToSlide(idx)}
-                className={`relative w-8 h-8 rounded-lg overflow-hidden border transition-all cursor-pointer flex-shrink-0 ${
+                className={`relative w-8 h-8 rounded-lg overflow-hidden border transition-all cursor-pointer flex-shrink-0 select-none ${
                   activeIndex === idx
                     ? 'border-amber-400 scale-110 shadow-[0_0_8px_#fbbf24]'
                     : 'border-white/10 opacity-50 hover:opacity-80'
                 }`}
                 title={getLocalized(item.title, item.titleFa)}
               >
-                <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                <img 
+                  src={item.imageUrl} 
+                  alt={item.title} 
+                  onContextMenu={(e) => e.preventDefault()}
+                  className="w-full h-full object-cover pointer-events-none" 
+                  referrerPolicy="no-referrer" 
+                />
               </button>
             ))}
 

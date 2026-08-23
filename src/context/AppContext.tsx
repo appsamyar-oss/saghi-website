@@ -90,7 +90,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (e) {
       // Ignore error in restricted env
     }
-    return 'fa'; // Default to Persian as requested, or can toggle to English easily
+    return 'en'; // Default to English as requested
   });
 
   // 2. View Router State

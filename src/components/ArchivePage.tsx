@@ -267,17 +267,24 @@ export const ArchivePage: React.FC<ArchivePageProps> = ({
                         <div className="relative h-full bg-white/5 backdrop-blur-sm border border-white/10 rounded-3xl p-6 flex flex-col justify-between hover:border-amber-400/40 transition-colors shadow-2xl">
                           {/* Image Frame with B&W to Color on Hover */}
                           <div>
-                            <div className="relative mb-6 overflow-hidden rounded-2xl border border-white/10 aspect-[4/3] bg-neutral-950 group">
+                            <div className="relative mb-6 overflow-hidden rounded-2xl border border-white/10 aspect-[4/3] bg-neutral-950 group select-none">
                               <img
                                 src={art.imageUrl}
                                 alt={title}
                                 referrerPolicy="no-referrer"
-                                className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700 group-hover:scale-105"
+                                onContextMenu={(e) => e.preventDefault()}
+                                className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700 group-hover:scale-105 pointer-events-none"
                                 loading="lazy"
                               />
 
+                              {/* Anti-Piracy Shield Overlay */}
+                              <div 
+                                className="absolute inset-0 z-10" 
+                                onContextMenu={(e) => e.preventDefault()} 
+                              />
+
                               {/* Badges */}
-                              <div className="absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-none">
+                              <div className="absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-none z-20">
                                 <span className="px-2.5 py-1 rounded-md bg-black/80 backdrop-blur border border-white/10 text-[9px] font-mono uppercase tracking-widest text-amber-300 flex items-center gap-1">
                                   {isMusic && <Music className="w-2.5 h-2.5" />}
                                   <span>{art.category}</span>
@@ -288,7 +295,7 @@ export const ArchivePage: React.FC<ArchivePageProps> = ({
                               </div>
 
                               {/* Overlay actions */}
-                              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end justify-between p-4">
+                              <div className="absolute inset-0 z-20 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end justify-between p-4">
                                 <button
                                   onClick={() => onSelectArtwork(art)}
                                   className="px-3.5 py-2 rounded-xl bg-white text-black text-xs font-bold flex items-center gap-1.5 hover:bg-amber-200 transition-colors cursor-pointer shadow-lg"

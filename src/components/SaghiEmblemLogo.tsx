@@ -28,10 +28,12 @@ export const SaghiEmblemLogo: React.FC<SaghiEmblemLogoProps> = ({
   const isDark = variant === 'dark';
   const isWhite = variant === 'white';
 
-  // Check if custom uploaded logo is set in siteConfig
-  const customImgSrc = variant === 'dark' && siteConfig.customLogoDarkUrl 
+  const DEFAULT_TRANSPARENT_LOGO = 'https://qf1mwtdvcbajjjdk.public.blob.vercel-storage.com/Art%20Gallery/saghi%20logo%20Transparent.png';
+
+  // Check if custom uploaded logo is set in siteConfig or fallback to default studio transparent logo
+  const customImgSrc = (variant === 'dark' && siteConfig.customLogoDarkUrl)
     ? siteConfig.customLogoDarkUrl 
-    : siteConfig.customLogoUrl || siteConfig.customLogoTransparentUrl;
+    : siteConfig.customLogoUrl || siteConfig.customLogoTransparentUrl || DEFAULT_TRANSPARENT_LOGO;
 
   if (customImgSrc) {
     return (
@@ -53,7 +55,8 @@ export const SaghiEmblemLogo: React.FC<SaghiEmblemLogoProps> = ({
           <img 
             src={customImgSrc} 
             alt={siteConfig.artistNameEn || 'Saghi Abyar'} 
-            className="w-full h-full object-contain filter drop-shadow-[0_4px_12px_rgba(0,0,0,0.5)]"
+            onContextMenu={(e) => e.preventDefault()}
+            className="w-full h-full object-contain filter drop-shadow-[0_4px_12px_rgba(0,0,0,0.5)] pointer-events-none select-none"
           />
         </div>
       </div>

@@ -12,10 +12,12 @@ import { PhotoDetailModal } from './components/PhotoDetailModal';
 import { PurchaseInquiryModal } from './components/PurchaseInquiryModal';
 import { AdminModal } from './components/admin/AdminModal';
 import { AmbientOilCanvas } from './components/AmbientOilCanvas';
+import { SplashScreen } from './components/SplashScreen';
 
 function MainApp() {
   const { isAdminOpen, setIsAdminOpen, isFa } = useApp();
 
+  const [showSplash, setShowSplash] = useState<boolean>(true);
   const [activeView, setActiveView] = useState<PageView>('home');
   const [selectedArtwork, setSelectedArtwork] = useState<Artwork | null>(null);
   const [isInquiryOpen, setIsInquiryOpen] = useState<boolean>(false);
@@ -46,6 +48,9 @@ function MainApp() {
 
   return (
     <div className={`min-h-screen bg-black text-white selection:bg-amber-500/30 font-sans relative ${isFa ? 'font-vazir' : ''}`}>
+      {/* Initial Cinematic Video Splash Screen */}
+      {showSplash && <SplashScreen onComplete={() => setShowSplash(false)} />}
+
       {/* Ambient Oil Painting Texture Canvas Background */}
       <AmbientOilCanvas activeView={activeView} />
 

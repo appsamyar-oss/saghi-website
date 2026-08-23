@@ -195,13 +195,17 @@ export const HomePage: React.FC<HomePageProps> = ({
                 onClick={() => onSelectArtwork(heroArtwork)}
               >
                 <div className="absolute inset-0 bg-gradient-to-tr from-amber-500 to-rose-500 rounded-3xl transform rotate-2 blur-sm opacity-25 group-hover:opacity-45 transition-opacity duration-500" />
-                <div className="relative rounded-3xl overflow-hidden border border-white/10 shadow-2xl bg-black p-4 bg-white/5">
-                  <img
-                    src={heroArtwork.imageUrl}
-                    alt={heroArtwork.title}
-                    referrerPolicy="no-referrer"
-                    className="w-full h-auto max-h-[460px] object-cover rounded-2xl grayscale group-hover:grayscale-0 transition-all duration-700 mx-auto"
-                  />
+                <div className="relative rounded-3xl overflow-hidden border border-white/10 shadow-2xl bg-black p-4 bg-white/5 select-none">
+                  <div className="relative overflow-hidden rounded-2xl">
+                    <img
+                      src={heroArtwork.imageUrl}
+                      alt={heroArtwork.title}
+                      referrerPolicy="no-referrer"
+                      onContextMenu={(e) => e.preventDefault()}
+                      className="w-full h-auto max-h-[460px] object-cover rounded-2xl grayscale group-hover:grayscale-0 transition-all duration-700 mx-auto pointer-events-none"
+                    />
+                    <div className="absolute inset-0 z-10 pointer-events-none" onContextMenu={(e) => e.preventDefault()} />
+                  </div>
                   <div className="mt-4 flex items-center justify-between text-xs font-mono text-white/60">
                     <span className="text-amber-400 font-bold">{getLocalized(heroArtwork.artist, heroArtwork.artistFa)}</span>
                     <span dir="ltr">{heroArtwork.dastgah ? `${heroArtwork.dastgah} • ` : ''}{heroArtwork.duration || heroArtwork.year}</span>
@@ -255,15 +259,17 @@ export const HomePage: React.FC<HomePageProps> = ({
                     />
                     <div className={`relative h-full bg-white/5 backdrop-blur-sm border border-white/10 rounded-3xl p-5 flex flex-col justify-between ${isFa ? 'text-right' : 'text-left'}`}>
                       <div>
-                        <div className="relative mb-5 overflow-hidden rounded-2xl border border-white/10 aspect-square bg-neutral-900">
+                        <div className="relative mb-5 overflow-hidden rounded-2xl border border-white/10 aspect-square bg-neutral-900 select-none">
                           <img
                             src={art.imageUrl}
                             alt={title}
                             referrerPolicy="no-referrer"
-                            className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700 group-hover:scale-105"
+                            onContextMenu={(e) => e.preventDefault()}
+                            className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700 group-hover:scale-105 pointer-events-none"
                             loading="lazy"
                           />
-                          <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none">
+                          <div className="absolute inset-0 z-10 pointer-events-none" onContextMenu={(e) => e.preventDefault()} />
+                          <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none z-20">
                             <span className="px-2 py-0.5 rounded bg-black/80 backdrop-blur border border-white/10 text-[9px] font-mono text-amber-300 uppercase tracking-widest flex items-center gap-1">
                               {isMusic && <Music className="w-2.5 h-2.5" />}
                               <span>{art.category}</span>
@@ -305,7 +311,7 @@ export const HomePage: React.FC<HomePageProps> = ({
           </section>
 
           {/* Section 2: Craft & Philosophy */}
-          <section className="grid md:grid-cols-12 gap-12 items-center">
+          <section className="grid md:grid-cols-12 gap-12 items-center select-none">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               whileInView={{ opacity: 1, scale: 1 }}
@@ -314,20 +320,28 @@ export const HomePage: React.FC<HomePageProps> = ({
               className="md:col-span-6 order-2 md:order-1 grid grid-cols-2 gap-4 items-center"
             >
               <div className="relative group rounded-3xl overflow-hidden border border-white/10 shadow-lg transform translate-y-6 bg-white/5 p-2">
-                <img
-                  src="https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&q=80"
-                  alt="Tar Resonance"
-                  referrerPolicy="no-referrer"
-                  className="w-full h-64 object-cover rounded-2xl grayscale group-hover:grayscale-0 transition-all duration-700"
-                />
+                <div className="relative h-64 overflow-hidden rounded-2xl">
+                  <img
+                    src="https://qf1mwtdvcbajjjdk.public.blob.vercel-storage.com/Art%20Gallery/535370282_18174766348343323_31405188512772339_n.jpg"
+                    alt="Tar Resonance"
+                    referrerPolicy="no-referrer"
+                    onContextMenu={(e) => e.preventDefault()}
+                    className="w-full h-full object-cover rounded-2xl grayscale group-hover:grayscale-0 transition-all duration-700 pointer-events-none group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 z-10 pointer-events-none" onContextMenu={(e) => e.preventDefault()} />
+                </div>
               </div>
               <div className="relative group rounded-3xl overflow-hidden border border-white/10 shadow-lg bg-white/5 p-2">
-                <img
-                  src="https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=800&q=80"
-                  alt="Oil Canvas"
-                  referrerPolicy="no-referrer"
-                  className="w-full h-64 object-cover rounded-2xl grayscale group-hover:grayscale-0 transition-all duration-700"
-                />
+                <div className="relative h-64 overflow-hidden rounded-2xl">
+                  <img
+                    src="https://qf1mwtdvcbajjjdk.public.blob.vercel-storage.com/Art%20Gallery/603041437_17905300002315827_2091870345981580017_n.jpg"
+                    alt="Oil Canvas"
+                    referrerPolicy="no-referrer"
+                    onContextMenu={(e) => e.preventDefault()}
+                    className="w-full h-full object-cover rounded-2xl grayscale group-hover:grayscale-0 transition-all duration-700 pointer-events-none group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 z-10 pointer-events-none" onContextMenu={(e) => e.preventDefault()} />
+                </div>
               </div>
             </motion.div>
 
