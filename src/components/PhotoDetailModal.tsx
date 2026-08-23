@@ -200,15 +200,17 @@ export const PhotoDetailModal: React.FC<PhotoDetailModalProps> = ({
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   };
 
-  const title = getLocalized(artwork.title, artwork.titleFa);
-  const subtitle = getLocalized(artwork.subtitle, artwork.subtitleFa);
-  const desc = getLocalized(artwork.description, artwork.descriptionFa);
-  const medium = getLocalized(artwork.medium, artwork.mediumFa);
-  const artist = getLocalized(artwork.artist, artwork.artistFa);
-  const origin = getLocalized(artwork.culturalOrigin, artwork.culturalOriginFa);
+  const title = getLocalized(artwork.titleEn || artwork.title, artwork.titleFa);
+  const subtitle = getLocalized(artwork.subtitleEn || artwork.subtitle, artwork.subtitleFa);
+  const desc = getLocalized(artwork.descriptionEn || artwork.description, artwork.descriptionFa);
+  const medium = getLocalized(artwork.mediumEn || artwork.medium, artwork.mediumFa);
+  const artist = getLocalized(artwork.artistEn || artwork.artist, artwork.artistFa);
+  const origin = getLocalized(artwork.culturalOriginEn || artwork.culturalOrigin, artwork.culturalOriginFa);
   const provenance = getLocalized(artwork.provenance, artwork.provenanceFa);
-  const dastgah = getLocalized(artwork.dastgah, artwork.dastgahFa);
-  const instrument = getLocalized(artwork.instrument, artwork.instrumentFa);
+  const dastgah = getLocalized(artwork.dastgahEn || artwork.dastgah, artwork.dastgahFa);
+  const instrument = getLocalized(artwork.instrumentEn || artwork.instrument, artwork.instrumentFa);
+  const dimensions = getLocalized(artwork.dimensionsEn || artwork.dimensions, artwork.dimensionsFa);
+  const price = getLocalized(artwork.priceEn || artwork.price, artwork.priceFa);
 
   const isAudio = artwork.mediaType === 'audio';
   const isVideo = artwork.mediaType === 'video';
@@ -420,17 +422,17 @@ export const PhotoDetailModal: React.FC<PhotoDetailModalProps> = ({
                   <span className={`text-cyan-300 truncate max-w-[240px] ${isFa ? 'text-left font-vazir' : 'text-right'}`}>{medium}</span>
                 </div>
 
-                {artwork.dimensions && (
+                {dimensions && (
                   <div className="flex justify-between items-center text-gray-300 gap-2">
                     <span className="text-gray-400 font-mono uppercase text-[10px] tracking-wider flex-shrink-0">{t.detail.dimensions}:</span>
-                    <span dir="ltr" className="font-mono text-gray-200">{artwork.dimensions}</span>
+                    <span dir={isFa ? "rtl" : "ltr"} className={`font-mono text-gray-200 ${isFa ? 'font-vazir' : ''}`}>{dimensions}</span>
                   </div>
                 )}
 
-                {artwork.price && (
+                {price && (
                   <div className="flex justify-between items-center text-gray-300 gap-2 pt-1 border-t border-white/5">
                     <span className="text-gray-400 font-mono uppercase text-[10px] tracking-wider flex-shrink-0">{t.detail.priceInfo}:</span>
-                    <span className="font-mono font-bold text-amber-400">{artwork.price}</span>
+                    <span className={`font-mono font-bold text-amber-400 ${isFa ? 'font-vazir' : ''}`}>{price}</span>
                   </div>
                 )}
               </div>

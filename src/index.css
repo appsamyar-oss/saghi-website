@@ -241,6 +241,227 @@
   color: transparent;
 }
 
+/* =========================================
+   Apple Liquid Navigation Bar Styles
+   ========================================= */
+.liquid-nav {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 99px;
+  background: rgba(30, 30, 35, 0.45);
+  backdrop-filter: blur(50px) saturate(200%);
+  -webkit-backdrop-filter: blur(50px) saturate(200%);
+  box-shadow:
+    0 40px 80px -20px rgba(0, 0, 0, 0.8),
+    0 10px 30px -10px rgba(0, 0, 0, 0.8),
+    inset 0 2px 3px -1px rgba(255, 255, 255, 0.25),
+    inset 0 -2px 4px -1px rgba(255, 255, 255, 0.05),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+  transition: all 0.5s ease;
+  z-index: 10;
+}
+
+.liquid-nav::before {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  right: 1px;
+  height: 46%;
+  border-radius: 99px 99px 24px 24px / 99px 99px 12px 12px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0) 100%);
+  pointer-events: none;
+  z-index: 6;
+  transition: background 0.5s ease;
+}
+
+.liquid-glare-container {
+  position: absolute;
+  inset: 0;
+  border-radius: 99px;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.liquid-glare {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  background: radial-gradient(circle 90px at var(--x, 50%) var(--y, 50%), rgba(255, 255, 255, 0.25) 0%, transparent 100%);
+  mix-blend-mode: overlay;
+}
+
+.liquid-nav:hover .liquid-glare {
+  opacity: 1;
+}
+
+.nav-items-liquid {
+  position: relative;
+  display: flex;
+  gap: 4px;
+  z-index: 3;
+}
+
+.liquid-nav-btn {
+  position: relative;
+  background: transparent;
+  border: none;
+  padding: 0 16px;
+  height: 40px;
+  border-radius: 99px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.3s ease;
+  outline: none;
+  z-index: 2;
+}
+
+.liquid-btn-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  transition: transform 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.liquid-nav-btn:active .liquid-btn-content {
+  transform: scale(0.92);
+}
+
+.liquid-nav-btn.active {
+  color: #ffffff;
+}
+
+.liquid-divider {
+  width: 1px;
+  height: 22px;
+  background: rgba(255, 255, 255, 0.15);
+  margin: 0 4px;
+  z-index: 3;
+  transition: background 0.5s ease;
+}
+
+/* =========================================
+   Glowing Animated Login Box Styles
+   ========================================= */
+@property --a {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes rotating-border {
+  0% {
+    --a: 0deg;
+  }
+  100% {
+    --a: 360deg;
+  }
+}
+
+.glowing-login-box {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  background: repeating-conic-gradient(
+    from var(--a),
+    #fbbf24 0%,
+    #fbbf24 5%,
+    transparent 5%,
+    transparent 40%,
+    #fbbf24 50%
+  );
+  filter: drop-shadow(0 15px 50px rgba(0, 0, 0, 0.9));
+  animation: rotating-border 4s linear infinite;
+  border-radius: 24px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: 0.5s ease;
+}
+
+.glowing-login-box::before {
+  content: "";
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background: repeating-conic-gradient(
+    from var(--a),
+    #45f3ff 0%,
+    #45f3ff 5%,
+    transparent 5%,
+    transparent 40%,
+    #45f3ff 50%
+  );
+  filter: drop-shadow(0 15px 50px rgba(0, 0, 0, 0.9));
+  border-radius: 24px;
+  animation: rotating-border 4s linear infinite;
+  animation-delay: -1s;
+}
+
+.glowing-login-box::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  background: #14141a;
+  border-radius: 20px;
+  border: 4px solid #1a1a22;
+  z-index: 1;
+}
+
+.glowing-login-inner {
+  position: relative;
+  width: 100%;
+  padding: 32px 28px;
+  border-radius: 18px;
+  background: rgba(12, 12, 16, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  z-index: 2;
+  box-shadow: inset 0 10px 20px rgba(0, 0, 0, 0.6);
+  border-bottom: 2px solid rgba(251, 191, 36, 0.4);
+}
+
+.glowing-input-field {
+  width: 100%;
+  padding: 12px 18px;
+  outline: none;
+  font-size: 0.875rem;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  border-radius: 30px;
+  transition: all 0.3s ease;
+}
+
+.glowing-input-field:focus {
+  border-color: #fbbf24;
+  box-shadow: 0 0 15px rgba(251, 191, 36, 0.3);
+}
+
+.glowing-submit-btn {
+  background: linear-gradient(135deg, #fbbf24 0%, #45f3ff 100%);
+  border: none;
+  font-weight: 700;
+  color: #000;
+  cursor: pointer;
+  transition: 0.4s ease;
+  border-radius: 30px;
+}
+
+.glowing-submit-btn:hover {
+  box-shadow: 0 0 15px #45f3ff, 0 0 35px rgba(251, 191, 36, 0.5);
+  transform: translateY(-1px);
+}
+
 /* Custom subtle scrollbar */
 ::-webkit-scrollbar {
   width: 8px;

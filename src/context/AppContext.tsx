@@ -5,6 +5,7 @@ import {
   CategoryItem, 
   SiteConfig, 
   CommissionInquiry,
+  ThreadMessage,
   AdminTab,
   PageView
 } from '../types';
@@ -18,6 +19,8 @@ import {
 } from '../data/initialData';
 
 import { TRANSLATIONS } from '../data/translations';
+import { dispatchInquiryEmail, sendAdminReply, syncInboundEmails, simulateInboundEmail } from '../utils/emailApi';
+import { saveInquiryToFirestore, fetchInquiriesFromFirestore, deleteInquiryFromFirestore } from '../firebase';
 
 interface AppContextType {
   // Localization
@@ -49,11 +52,19 @@ interface AppContextType {
   siteConfig: SiteConfig;
   updateSiteConfig: (config: Partial<SiteConfig>) => void;
 
-  // Inquiries / Commissions
+  // Inquiries & Email Conversation Threads
   inquiries: CommissionInquiry[];
-  addInquiry: (inquiry: Omit<CommissionInquiry, 'id' | 'createdAt' | 'status'>) => void;
+  addInquiry: (inquiry: Omit<CommissionInquiry, 'id' | 'createdAt' | 'status'>) => Promise<CommissionInquiry>;
   updateInquiryStatus: (id: string, status: CommissionInquiry['status'], notes?: string) => void;
+  replyToInquiry: (id: string, subject: string, replyText: string) => Promise<{ success: boolean; error?: string }>;
   deleteInquiry: (id: string) => void;
+  addInquiryTag: (inquiryId: string, tag: string) => void;
+  removeInquiryTag: (inquiryId: string, tag: string) => void;
+  addMessageTag: (inquiryId: string, messageId: string, tag: string) => void;
+  removeMessageTag: (inquiryId: string, messageId: string, tag: string) => void;
+  appendInboundMessage: (inquiryId: string, message: ThreadMessage) => void;
+  syncInboundResendEmails: () => Promise<{ success: boolean; count: number; message?: string }>;
+  simulateCollectorReply: (inquiryId: string, customMessage?: string) => Promise<{ success: boolean; message?: string }>;
 
   // Admin Access & Controls
   isAdminOpen: boolean;
@@ -273,35 +284,358 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   // Inquiries
-  const addInquiry = (inquiryData: Omit<CommissionInquiry, 'id' | 'createdAt' | 'status'>) => {
+  const addInquiry = async (inquiryData: Omit<CommissionInquiry, 'id' | 'createdAt' | 'status'>): Promise<CommissionInquiry> => {
     const now = new Date();
     const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    
+    const newId = `inq-${Date.now()}`;
+
+    const initialMessage: ThreadMessage = {
+      id: `msg-${Date.now()}-init`,
+      senderType: 'user',
+      senderName: inquiryData.name,
+      senderEmail: inquiryData.email,
+      recipientEmail: 'contact@saghiabyar.com',
+      subject: `Inquiry: ${inquiryData.interest || inquiryData.artworkTitle || 'Studio Art & Music'}`,
+      message: inquiryData.message,
+      createdAt: formattedDate,
+      status: 'received',
+      tags: ['Initial Inquiry'],
+    };
+
     const newInquiry: CommissionInquiry = {
       ...inquiryData,
-      id: `inq-${Date.now()}`,
+      id: newId,
       createdAt: formattedDate,
       status: 'new',
+      emailDeliveryStatus: 'simulated',
+      tags: ['New Inquiry'],
+      messages: [initialMessage],
     };
+
+    // 1. Immediately store in local state for rapid UI feedback
     setInquiries((prev) => [newInquiry, ...prev]);
+
+    // Save to Firestore
+    saveInquiryToFirestore(newInquiry).catch(() => {});
+
+    // 2. Dispatch live automated double-email (User Confirmation + Admin Notification) via serverless Resend API
+    try {
+      const emailResult = await dispatchInquiryEmail({
+        name: newInquiry.name,
+        email: newInquiry.email,
+        phone: newInquiry.phone,
+        inquiryType: newInquiry.inquiryType,
+        artworkTitle: newInquiry.artworkTitle,
+        dimensions: newInquiry.dimensions,
+        interest: newInquiry.interest,
+        message: newInquiry.message,
+        inquiryId: newInquiry.id,
+      });
+
+      // Update inquiry status with actual delivery result
+      setInquiries((prev) =>
+        prev.map((item) => {
+          if (item.id === newInquiry.id) {
+            const updated = {
+              ...item,
+              emailDeliveryStatus: emailResult.success ? (emailResult.mode === 'live' ? 'sent' : 'simulated') : 'failed',
+              userEmailSent: emailResult.userEmailSent,
+              adminEmailSent: emailResult.adminEmailSent,
+            };
+            saveInquiryToFirestore(updated).catch(() => {});
+            return updated;
+          }
+          return item;
+        })
+      );
+    } catch (err) {
+      console.warn('[AppContext] Background email dispatch caught:', err);
+    }
+
+    return newInquiry;
   };
 
   const updateInquiryStatus = (id: string, status: CommissionInquiry['status'], notes?: string) => {
     setInquiries((prev) =>
-      prev.map((inq) =>
-        inq.id === id
-          ? {
-              ...inq,
-              status,
-              adminNotes: notes !== undefined ? notes : inq.adminNotes,
-            }
-          : inq
-      )
+      prev.map((inq) => {
+        if (inq.id === id) {
+          const updated = {
+            ...inq,
+            status,
+            adminNotes: notes !== undefined ? notes : inq.adminNotes,
+          };
+          saveInquiryToFirestore(updated).catch(() => {});
+          return updated;
+        }
+        return inq;
+      })
     );
+  };
+
+  const replyToInquiry = async (id: string, subject: string, replyText: string): Promise<{ success: boolean; error?: string }> => {
+    const target = inquiries.find((inq) => inq.id === id);
+    if (!target) {
+      return { success: false, error: 'Inquiry not found' };
+    }
+
+    try {
+      const result = await sendAdminReply({
+        toEmail: target.email,
+        toName: target.name,
+        subject,
+        message: replyText,
+        originalMessage: target.message,
+        inquiryId: target.id,
+      });
+
+      if (result.success) {
+        const now = new Date().toISOString();
+        const newReplyMessage: ThreadMessage = {
+          id: `msg-reply-${Date.now()}`,
+          senderType: 'admin',
+          senderName: 'Saghi Abyar Studio',
+          senderEmail: 'contact@saghiabyar.com',
+          recipientEmail: target.email,
+          subject,
+          message: replyText,
+          createdAt: now,
+          status: result.mode === 'live' ? 'sent' : 'simulated',
+          tags: ['Admin Reply', 'Official Studio'],
+          emailId: result.emailId,
+        };
+
+        setInquiries((prev) =>
+          prev.map((item) => {
+            if (item.id === id) {
+              const currentMessages = Array.isArray(item.messages) && item.messages.length > 0
+                ? item.messages
+                : [
+                    {
+                      id: `msg-${Date.now()}-orig`,
+                      senderType: 'user' as const,
+                      senderName: item.name,
+                      senderEmail: item.email,
+                      recipientEmail: 'contact@saghiabyar.com',
+                      subject: item.interest || item.artworkTitle || 'Studio Inquiry',
+                      message: item.message,
+                      createdAt: item.createdAt,
+                      status: 'received' as const,
+                      tags: ['Initial Inquiry'],
+                    }
+                  ];
+
+              const updated: CommissionInquiry = {
+                ...item,
+                status: 'contacted',
+                repliedAt: now,
+                replySubject: subject,
+                replyMessage: replyText,
+                messages: [...currentMessages, newReplyMessage],
+              };
+              saveInquiryToFirestore(updated).catch(() => {});
+              return updated;
+            }
+            return item;
+          })
+        );
+        return { success: true };
+      } else {
+        return { success: false, error: result.error || 'Failed to send reply' };
+      }
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Error executing email reply' };
+    }
   };
 
   const deleteInquiry = (id: string) => {
     setInquiries((prev) => prev.filter((inq) => inq.id !== id));
+    deleteInquiryFromFirestore(id).catch(() => {});
+  };
+
+  // Tag Management for Thread
+  const addInquiryTag = (inquiryId: string, tag: string) => {
+    const trimmed = tag.trim();
+    if (!trimmed) return;
+    setInquiries((prev) =>
+      prev.map((inq) => {
+        if (inq.id === inquiryId) {
+          const currentTags = inq.tags || [];
+          if (currentTags.includes(trimmed)) return inq;
+          const updated = {
+            ...inq,
+            tags: [...currentTags, trimmed],
+          };
+          saveInquiryToFirestore(updated).catch(() => {});
+          return updated;
+        }
+        return inq;
+      })
+    );
+  };
+
+  const removeInquiryTag = (inquiryId: string, tag: string) => {
+    setInquiries((prev) =>
+      prev.map((inq) => {
+        if (inq.id === inquiryId) {
+          const updated = {
+            ...inq,
+            tags: (inq.tags || []).filter((t) => t !== tag),
+          };
+          saveInquiryToFirestore(updated).catch(() => {});
+          return updated;
+        }
+        return inq;
+      })
+    );
+  };
+
+  // Tag Management for Individual Messages in a Thread
+  const addMessageTag = (inquiryId: string, messageId: string, tag: string) => {
+    const trimmed = tag.trim();
+    if (!trimmed) return;
+    setInquiries((prev) =>
+      prev.map((inq) => {
+        if (inq.id === inquiryId && Array.isArray(inq.messages)) {
+          const updatedMessages = inq.messages.map((msg) => {
+            if (msg.id === messageId) {
+              const currentTags = msg.tags || [];
+              if (currentTags.includes(trimmed)) return msg;
+              return { ...msg, tags: [...currentTags, trimmed] };
+            }
+            return msg;
+          });
+          const updated = { ...inq, messages: updatedMessages };
+          saveInquiryToFirestore(updated).catch(() => {});
+          return updated;
+        }
+        return inq;
+      })
+    );
+  };
+
+  const removeMessageTag = (inquiryId: string, messageId: string, tag: string) => {
+    setInquiries((prev) =>
+      prev.map((inq) => {
+        if (inq.id === inquiryId && Array.isArray(inq.messages)) {
+          const updatedMessages = inq.messages.map((msg) => {
+            if (msg.id === messageId) {
+              return { ...msg, tags: (msg.tags || []).filter((t) => t !== tag) };
+            }
+            return msg;
+          });
+          const updated = { ...inq, messages: updatedMessages };
+          saveInquiryToFirestore(updated).catch(() => {});
+          return updated;
+        }
+        return inq;
+      })
+    );
+  };
+
+  // Append Inbound Message to Thread
+  const appendInboundMessage = (inquiryId: string, message: ThreadMessage) => {
+    setInquiries((prev) =>
+      prev.map((inq) => {
+        if (inq.id === inquiryId) {
+          const currentMessages = Array.isArray(inq.messages) && inq.messages.length > 0
+            ? inq.messages
+            : [
+                {
+                  id: `msg-${Date.now()}-orig`,
+                  senderType: 'user' as const,
+                  senderName: inq.name,
+                  senderEmail: inq.email,
+                  recipientEmail: 'contact@saghiabyar.com',
+                  subject: inq.interest || inq.artworkTitle || 'Studio Inquiry',
+                  message: inq.message,
+                  createdAt: inq.createdAt,
+                  status: 'received' as const,
+                  tags: ['Initial Inquiry'],
+                }
+              ];
+          const updated: CommissionInquiry = {
+            ...inq,
+            status: 'in_review',
+            messages: [...currentMessages, message],
+          };
+          saveInquiryToFirestore(updated).catch(() => {});
+          return updated;
+        }
+        return inq;
+      })
+    );
+  };
+
+  // Sync Inbound Emails from Resend Receiving API
+  const syncInboundResendEmails = async (): Promise<{ success: boolean; count: number; message?: string }> => {
+    try {
+      const res = await syncInboundEmails();
+      if (res.success && Array.isArray(res.emails) && res.emails.length > 0) {
+        let syncedCount = 0;
+        for (const raw of res.emails) {
+          const senderEmail = typeof raw.from === 'string' ? raw.from : raw.from?.email;
+          const subject = raw.subject || '';
+          
+          // Match thread by email or subject
+          const matchedInquiry = inquiries.find(
+            (inq) => (senderEmail && inq.email.toLowerCase() === senderEmail.toLowerCase()) ||
+                     (inq.id && subject.includes(inq.id))
+          );
+
+          if (matchedInquiry) {
+            const newMsg: ThreadMessage = {
+              id: `msg-inb-${raw.id || Date.now()}`,
+              senderType: 'user',
+              senderName: raw.from_name || matchedInquiry.name,
+              senderEmail: senderEmail || matchedInquiry.email,
+              recipientEmail: 'contact@saghiabyar.com',
+              subject: subject || `Re: ${matchedInquiry.interest || 'Inquiry'}`,
+              message: raw.text || raw.snippet || 'Received reply from patron via email.',
+              createdAt: raw.created_at || new Date().toISOString(),
+              status: 'received',
+              tags: ['Inbound Email', 'Resend Sync'],
+              emailId: raw.id,
+            };
+            appendInboundMessage(matchedInquiry.id, newMsg);
+            syncedCount++;
+          }
+        }
+        return { success: true, count: syncedCount, message: `Successfully synced ${syncedCount} inbound email(s)` };
+      }
+      return { 
+        success: true, 
+        count: 0, 
+        message: res.mode === 'simulated' ? 'Email service running in simulated mode. Use Simulate Collector Reply to test.' : 'Inbox is up to date (0 new messages).' 
+      };
+    } catch (err: any) {
+      return { success: false, count: 0, message: err.message || 'Failed to sync inbound emails' };
+    }
+  };
+
+  // Simulate collector reply for immediate testing
+  const simulateCollectorReply = async (inquiryId: string, customMessage?: string): Promise<{ success: boolean; message?: string }> => {
+    const target = inquiries.find((inq) => inq.id === inquiryId);
+    if (!target) return { success: false, message: 'Inquiry not found' };
+
+    const simulatedText = customMessage || 'Hello Saghi Abyar Studio! Thank you for the detailed information. We would be delighted to confirm the acquisition schedule and finalize the payment.';
+    
+    try {
+      const res = await simulateInboundEmail({
+        inquiryId,
+        senderName: target.name,
+        senderEmail: target.email,
+        message: simulatedText,
+        subject: `Re: ${target.replySubject || target.interest || 'Studio Inquiry'} [${target.id}]`,
+      });
+
+      if (res.success && res.receivedMessage) {
+        appendInboundMessage(inquiryId, res.receivedMessage);
+        return { success: true, message: 'Simulated collector reply received in thread' };
+      }
+      return { success: false, message: 'Failed to simulate response' };
+    } catch (err: any) {
+      return { success: false, message: err.message };
+    }
   };
 
   // Admin Auth
@@ -395,7 +729,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         inquiries,
         addInquiry,
         updateInquiryStatus,
+        replyToInquiry,
         deleteInquiry,
+        addInquiryTag,
+        removeInquiryTag,
+        addMessageTag,
+        removeMessageTag,
+        appendInboundMessage,
+        syncInboundResendEmails,
+        simulateCollectorReply,
         isAdminOpen,
         setIsAdminOpen,
         adminTab,

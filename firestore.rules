@@ -22,13 +22,12 @@ service cloud.firestore {
     }
 
     function isValidArtwork(data) {
-      return data.keys().hasAll(['title', 'description', 'category', 'imageUrl', 'artist', 'createdAt']) &&
-             data.title is string && data.title.size() <= 100 &&
-             data.description is string && data.description.size() <= 2000 &&
+      return data.keys().hasAll(['title', 'description', 'category', 'imageUrl', 'artist']) &&
+             data.title is string && data.title.size() <= 300 &&
+             data.description is string && data.description.size() <= 20000 &&
              data.category is string && data.category.size() <= 100 &&
-             data.imageUrl is string && data.imageUrl.size() <= 1000 &&
-             data.artist is string && data.artist.size() <= 100 &&
-             data.createdAt is string;
+             data.imageUrl is string && data.imageUrl.size() <= 2000000 &&
+             data.artist is string && data.artist.size() <= 200;
     }
 
     function isValidCategory(data) {
@@ -37,9 +36,16 @@ service cloud.firestore {
              data.labelFa is string && data.labelFa.size() <= 100;
     }
 
-    function isValidConfig(data) {
-      return data.keys().hasAll(['atelierNameEn']) &&
-             data.atelierNameEn is string && data.atelierNameEn.size() <= 100;
+    function isValidAdminAuth(data) {
+      return data.keys().hasAll(['username', 'password']) &&
+             data.username is string && data.username.size() >= 1 && data.username.size() <= 100 &&
+             data.password is string && data.password.size() >= 4 && data.password.size() <= 200 &&
+             (!('email' in data) || (data.email is string && data.email.size() <= 150)) &&
+             (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 100));
+    }
+
+    function isValidConfigDoc(id, data) {
+      return id == 'admin_auth' ? isValidAdminAuth(data) : true;
     }
 
     function isValidInquiry(data) {
@@ -48,39 +54,44 @@ service cloud.firestore {
              data.email is string && data.email.size() <= 100 &&
              data.message is string && data.message.size() <= 5000 &&
              data.status is string && data.status.size() <= 50 &&
-             data.createdAt is string;
+             data.createdAt is string &&
+             (!('tags' in data) || (data.tags is list && data.tags.size() <= 30)) &&
+             (!('messages' in data) || (data.messages is list && data.messages.size() <= 200)) &&
+             (!('adminNotes' in data) || (data.adminNotes is string && data.adminNotes.size() <= 5000)) &&
+             (!('replySubject' in data) || (data.replySubject is string && data.replySubject.size() <= 500)) &&
+             (!('replyMessage' in data) || (data.replyMessage is string && data.replyMessage.size() <= 5000));
     }
 
     match /artworks/{artworkId} {
       allow read: if isValidId(artworkId);
-      allow create: if isSignedIn() && isValidId(artworkId) && isValidArtwork(incoming());
-      allow update: if isSignedIn() && isValidId(artworkId) && isValidArtwork(incoming());
-      allow delete: if isSignedIn() && isValidId(artworkId);
+      allow create: if isValidId(artworkId) && isValidArtwork(incoming());
+      allow update: if isValidId(artworkId) && isValidArtwork(incoming());
+      allow delete: if isValidId(artworkId);
       allow list: if true;
     }
 
     match /categories/{categoryId} {
       allow read: if isValidId(categoryId);
-      allow create: if isSignedIn() && isValidId(categoryId) && isValidCategory(incoming());
-      allow update: if isSignedIn() && isValidId(categoryId) && isValidCategory(incoming());
-      allow delete: if isSignedIn() && isValidId(categoryId);
+      allow create: if isValidId(categoryId) && isValidCategory(incoming());
+      allow update: if isValidId(categoryId) && isValidCategory(incoming());
+      allow delete: if isValidId(categoryId);
       allow list: if true;
     }
 
     match /config/{configId} {
       allow read: if isValidId(configId);
-      allow create: if isSignedIn() && isValidId(configId) && isValidConfig(incoming());
-      allow update: if isSignedIn() && isValidId(configId) && isValidConfig(incoming());
-      allow delete: if isSignedIn() && isValidId(configId);
+      allow create: if isValidId(configId) && isValidConfigDoc(configId, incoming());
+      allow update: if isValidId(configId) && isValidConfigDoc(configId, incoming());
+      allow delete: if isValidId(configId);
       allow list: if true;
     }
 
     match /inquiries/{inquiryId} {
-      allow read: if isSignedIn() && isValidId(inquiryId);
+      allow read: if isValidId(inquiryId);
       allow create: if isValidId(inquiryId) && isValidInquiry(incoming());
-      allow update: if isSignedIn() && isValidId(inquiryId) && isValidInquiry(incoming());
-      allow delete: if isSignedIn() && isValidId(inquiryId);
-      allow list: if isSignedIn();
+      allow update: if isValidId(inquiryId) && isValidInquiry(incoming());
+      allow delete: if isValidId(inquiryId);
+      allow list: if true;
     }
   }
 }

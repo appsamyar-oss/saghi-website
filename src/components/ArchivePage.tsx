@@ -42,13 +42,15 @@ export const ArchivePage: React.FC<ArchivePageProps> = ({
       const matchesTag = !selectedTag || art.tags.includes(selectedTag);
       const query = searchQuery.trim().toLowerCase();
       
-      const titleMatch = art.title.toLowerCase().includes(query) || (art.titleFa && art.titleFa.toLowerCase().includes(query));
-      const descMatch = art.description.toLowerCase().includes(query) || (art.descriptionFa && art.descriptionFa.toLowerCase().includes(query));
-      const mediumMatch = art.medium.toLowerCase().includes(query) || (art.mediumFa && art.mediumFa.toLowerCase().includes(query));
-      const artistMatch = art.artist.toLowerCase().includes(query) || (art.artistFa && art.artistFa.toLowerCase().includes(query));
+      const titleMatch = (art.titleEn || art.title || '').toLowerCase().includes(query) || ((art.titleFa || '').toLowerCase().includes(query));
+      const descMatch = (art.descriptionEn || art.description || '').toLowerCase().includes(query) || ((art.descriptionFa || '').toLowerCase().includes(query));
+      const mediumMatch = (art.mediumEn || art.medium || '').toLowerCase().includes(query) || ((art.mediumFa || '').toLowerCase().includes(query));
+      const artistMatch = (art.artistEn || art.artist || '').toLowerCase().includes(query) || ((art.artistFa || '').toLowerCase().includes(query));
+      const subtitleMatch = (art.subtitleEn || art.subtitle || '').toLowerCase().includes(query) || ((art.subtitleFa || '').toLowerCase().includes(query));
+      const dastgahMatch = (art.dastgahEn || art.dastgah || '').toLowerCase().includes(query) || ((art.dastgahFa || '').toLowerCase().includes(query));
       const tagMatch = art.tags.some((tg) => tg.toLowerCase().includes(query));
 
-      const matchesSearch = !query || titleMatch || descMatch || mediumMatch || artistMatch || tagMatch;
+      const matchesSearch = !query || titleMatch || descMatch || mediumMatch || artistMatch || subtitleMatch || dastgahMatch || tagMatch;
 
       return matchesCategory && matchesTag && matchesSearch;
     });

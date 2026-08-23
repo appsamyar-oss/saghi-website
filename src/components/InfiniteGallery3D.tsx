@@ -45,6 +45,8 @@ export const InfiniteGallery3D: React.FC<InfiniteGallery3DProps> = ({
     materials: [] as THREE.ShaderMaterial[],
     targetSaturations: [] as number[],
     paintingGroups: [] as THREE.Group[],
+    meshes: [] as THREE.Mesh[],
+    hoveredIndex: null as number | null,
     mouse: { x: 0, y: 0 },
     isDragging: false,
     startX: 0,
@@ -147,6 +149,9 @@ export const InfiniteGallery3D: React.FC<InfiniteGallery3DProps> = ({
 
     const materials: THREE.ShaderMaterial[] = [];
     const paintingGroups: THREE.Group[] = [];
+    const paintingMeshes: THREE.Mesh[] = [];
+
+    const raycaster = new THREE.Raycaster();
 
     items.forEach((art, i) => {
       const group = new THREE.Group();
@@ -170,6 +175,8 @@ export const InfiniteGallery3D: React.FC<InfiniteGallery3DProps> = ({
       materials.push(mat);
 
       const mesh = new THREE.Mesh(planeGeo, mat);
+      mesh.userData = { index: i, artwork: art };
+      paintingMeshes.push(mesh);
 
       // Fine Museum Outer Frame Edge
       const edges = new THREE.EdgesGeometry(planeGeo);
@@ -216,6 +223,7 @@ export const InfiniteGallery3D: React.FC<InfiniteGallery3DProps> = ({
 
     stateRef.current.materials = materials;
     stateRef.current.paintingGroups = paintingGroups;
+    stateRef.current.meshes = paintingMeshes;
 
     // Snapping logic
     const snapToNearest = () => {
@@ -266,6 +274,20 @@ export const InfiniteGallery3D: React.FC<InfiniteGallery3DProps> = ({
       stateRef.current.mouse.x = (clientX / width) * 2 - 1;
       stateRef.current.mouse.y = -(clientY / height) * 2 + 1;
 
+      // Raycast to detect hover over paintings
+      raycaster.setFromCamera(stateRef.current.mouse, camera);
+      const intersects = raycaster.intersectObjects(stateRef.current.meshes);
+
+      if (intersects.length > 0) {
+        const hitMesh = intersects[0].object as THREE.Mesh;
+        const hitIdx = hitMesh.userData.index;
+        stateRef.current.hoveredIndex = hitIdx;
+        container.style.cursor = 'pointer';
+      } else {
+        stateRef.current.hoveredIndex = null;
+        container.style.cursor = stateRef.current.isDragging ? 'grabbing' : 'grab';
+      }
+
       if (stateRef.current.isDragging) {
         const diff = stateRef.current.startX - e.clientX;
         stateRef.current.targetScroll += diff * 0.15;
@@ -274,10 +296,27 @@ export const InfiniteGallery3D: React.FC<InfiniteGallery3DProps> = ({
       }
     };
 
-    const handleMouseUp = () => {
+    const handleMouseUp = (e: MouseEvent) => {
       if (stateRef.current.isDragging) {
+        const dragDist = Math.abs(e.clientX - stateRef.current.startX);
         stateRef.current.isDragging = false;
-        snapToNearest();
+
+        // If it was a clean click on a painting without dragging
+        if (dragDist < 6 && stateRef.current.hoveredIndex !== null) {
+          const clickedIdx = stateRef.current.hoveredIndex;
+          const currentRawIndex = Math.round(stateRef.current.targetScroll / CONFIG.spacingX);
+          const currentSafeIndex = ((currentRawIndex % CONFIG.slideCount) + CONFIG.slideCount) % CONFIG.slideCount;
+
+          if (clickedIdx === currentSafeIndex) {
+            // Already centered: open full high-resolution artwork detail view
+            onSelectArtwork(items[clickedIdx]);
+          } else {
+            // Center the clicked artwork and bloom its colors
+            stateRef.current.targetScroll = clickedIdx * CONFIG.spacingX;
+          }
+        } else {
+          snapToNearest();
+        }
       }
     };
 
@@ -338,23 +377,32 @@ export const InfiniteGallery3D: React.FC<InfiniteGallery3DProps> = ({
 
       if (isMovingNow) {
         setIsColorActive(false);
-        materials.forEach((mat) => {
-          mat.uniforms.uSaturation.value += (0.0 - mat.uniforms.uSaturation.value) * 0.12;
+        materials.forEach((mat, i) => {
+          const isHovered = i === stateRef.current.hoveredIndex;
+          const targetSat = isHovered ? 0.8 : 0.0;
+          mat.uniforms.uSaturation.value += (targetSat - mat.uniforms.uSaturation.value) * 0.12;
           mat.uniforms.uActive.value += (0.0 - mat.uniforms.uActive.value) * 0.1;
         });
       } else {
         setIsColorActive(true);
         materials.forEach((mat, i) => {
           const isCurrent = i === safeIndex;
+          const isHovered = i === stateRef.current.hoveredIndex;
           const isNear =
             Math.abs(i - safeIndex) === 1 ||
             Math.abs(i - safeIndex) === CONFIG.slideCount - 1;
 
-          const targetSat = isCurrent ? 1.0 : isNear ? 0.25 : 0.0;
-          const targetActive = isCurrent ? 1.0 : 0.0;
+          let targetSat = 0.0;
+          if (isCurrent || isHovered) {
+            targetSat = 1.0;
+          } else if (isNear) {
+            targetSat = 0.35;
+          }
+
+          const targetActive = (isCurrent || isHovered) ? 1.0 : 0.0;
 
           mat.uniforms.uSaturation.value +=
-            (targetSat - mat.uniforms.uSaturation.value) * 0.08;
+            (targetSat - mat.uniforms.uSaturation.value) * (isHovered ? 0.15 : 0.08);
           mat.uniforms.uActive.value +=
             (targetActive - mat.uniforms.uActive.value) * 0.08;
         });

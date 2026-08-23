@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Sparkles, 
@@ -7,7 +7,6 @@ import {
   Mail, 
   Compass, 
   Globe, 
-  ShieldCheck, 
   Menu, 
   X,
   ShoppingBag,
@@ -27,6 +26,63 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const { language, setLanguage, isFa, t, siteConfig, setIsAdminOpen } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Stealth Admin Trigger States: 5 clicks or 5 seconds long-press
+  const clickCountRef = useRef(0);
+  const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleLogoClick = () => {
+    setActiveView('home');
+    
+    // Stealth multi-click detector: 5 clicks within 2.5 seconds
+    clickCountRef.current += 1;
+    if (clickTimeoutRef.current) clearTimeout(clickTimeoutRef.current);
+
+    if (clickCountRef.current >= 5) {
+      clickCountRef.current = 0;
+      setIsAdminOpen(true);
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate([100, 50, 100]);
+      }
+      return;
+    }
+
+    clickTimeoutRef.current = setTimeout(() => {
+      clickCountRef.current = 0;
+    }, 2500);
+  };
+
+  const handleTouchStart = () => {
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = setTimeout(() => {
+      setIsAdminOpen(true);
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate([150, 80, 150]);
+      }
+    }, 5000); // 5 seconds long-press
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const handleMouseDown = () => {
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = setTimeout(() => {
+      setIsAdminOpen(true);
+    }, 5000); // 5 seconds long-press on desktop
+  };
+
+  const handleMouseUpOrLeave = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
 
   const toggleLanguage = () => {
     setLanguage(language === 'en' ? 'fa' : 'en');
@@ -52,32 +108,80 @@ export const Navbar: React.FC<NavbarProps> = ({
       )}
 
       <div className="container mx-auto px-4 sm:px-6 max-w-7xl h-20 flex items-center justify-between">
-        {/* Brand Logo */}
-        <BrandMotionLogo
-          size="md"
-          showSubtitle={true}
-          onClick={() => setActiveView('home')}
-        />
+        {/* Brand Logo with Stealth Admin Entry (5 Clicks, 5-Second Long-Press) */}
+        <div
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+          onTouchCancel={handleTouchEnd}
+          onMouseDown={handleMouseDown}
+          onMouseUp={handleMouseUpOrLeave}
+          onMouseLeave={handleMouseUpOrLeave}
+          className="select-none"
+        >
+          <BrandMotionLogo
+            size="md"
+            showSubtitle={true}
+            onClick={handleLogoClick}
+          />
+        </div>
 
-        {/* Desktop Nav Links */}
-        <nav className="hidden md:flex items-center gap-2 text-xs uppercase tracking-widest font-mono">
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setActiveView(item.id)}
-              className={`transition-all py-2 px-3.5 rounded-full flex items-center gap-1.5 cursor-pointer ${
-                activeView === item.id
-                  ? 'text-white bg-white/10 border border-white/20 shadow-sm'
-                  : 'text-white/60 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <item.icon className="w-3.5 h-3.5" />
-              <span>{item.label}</span>
-            </button>
-          ))}
+        {/* Desktop Nav Links - Apple Liquid Navigation Bar */}
+        <nav 
+          className="liquid-nav hidden md:flex items-center"
+          onMouseMove={(e) => {
+            const nav = e.currentTarget;
+            const rect = nav.getBoundingClientRect();
+            const glare = nav.querySelector('#liquid-glare') as HTMLElement | null;
+            if (glare) {
+              glare.style.setProperty('--x', `${e.clientX - rect.left}px`);
+              glare.style.setProperty('--y', `${e.clientY - rect.top}px`);
+            }
+          }}
+        >
+          {/* 3D Liquid Glare Follower */}
+          <div className="liquid-glare-container">
+            <div className="liquid-glare" id="liquid-glare" />
+          </div>
+
+          <div className="nav-items-liquid">
+            {navItems.map((item) => {
+              const isActive = activeView === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveView(item.id)}
+                  className={`liquid-nav-btn ${isActive ? 'active' : ''}`}
+                >
+                  {/* Smooth Motion Active Pill */}
+                  {isActive && (
+                    <motion.div
+                      layoutId="active-liquid-pill"
+                      className="absolute inset-0 rounded-full bg-white/15 border border-white/25 shadow-[0_4px_16px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.4)] z-[-1]"
+                      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                    />
+                  )}
+                  <div className="liquid-btn-content">
+                    <item.icon className={`w-3.5 h-3.5 ${isActive ? 'text-amber-400' : 'text-white/60'}`} />
+                    <span className="font-mono text-xs uppercase tracking-wider">{item.label}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="liquid-divider" />
+
+          {/* Quick Language Toggle Integrated in Liquid Bar */}
+          <button
+            onClick={toggleLanguage}
+            className="w-9 h-9 rounded-full flex items-center justify-center text-white/70 hover:text-white transition-colors cursor-pointer"
+            title="Switch Language / تغییر زبان"
+          >
+            <span className="font-mono text-xs font-bold text-amber-300">{isFa ? 'EN' : 'فا'}</span>
+          </button>
         </nav>
 
-        {/* Action Controls: Language Switcher, Commission Button, Admin */}
+        {/* Action Controls: Language Switcher, Commission Button */}
         <div className="flex items-center gap-2 sm:gap-3">
           {/* Purchase / Commission CTA Button */}
           <button
@@ -88,23 +192,14 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>{t.common.startCommission}</span>
           </button>
 
-          {/* Language Switcher */}
+          {/* Language Switcher on mobile */}
           <button
             onClick={toggleLanguage}
-            className="px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-mono flex items-center gap-1.5 text-white/90 hover:text-white transition-colors cursor-pointer"
+            className="md:hidden px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-mono flex items-center gap-1.5 text-white/90 hover:text-white transition-colors cursor-pointer"
             title="Switch Language / تغییر زبان"
           >
             <Globe className="w-3.5 h-3.5 text-amber-400" />
             <span className="font-bold">{isFa ? 'EN' : 'فا'}</span>
-          </button>
-
-          {/* Admin Studio Trigger */}
-          <button
-            onClick={() => setIsAdminOpen(true)}
-            className="p-2.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 hover:text-white transition-colors cursor-pointer"
-            title={t.nav.admin}
-          >
-            <ShieldCheck className="w-4 h-4 text-amber-400" />
           </button>
 
           {/* Mobile Menu Toggle */}

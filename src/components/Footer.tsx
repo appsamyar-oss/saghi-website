@@ -1,6 +1,6 @@
 import React from 'react';
 import { PageView } from '../types';
-import { Mail, Phone, Instagram, ArrowUpRight, ShieldCheck, ShoppingBag, Music, Palette } from 'lucide-react';
+import { Mail, Phone, Instagram, ArrowUpRight, ShoppingBag, Code, Sparkles } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { BrandMotionLogo } from './BrandMotionLogo';
 
@@ -11,7 +11,7 @@ interface FooterProps {
 export const Footer: React.FC<FooterProps> = ({
   setActiveView,
 }) => {
-  const { siteConfig, isFa, t, setIsAdminOpen } = useApp();
+  const { siteConfig, isFa, t } = useApp();
 
   return (
     <footer className="relative bg-black text-white border-t border-white/10 pt-20 pb-16 overflow-hidden">
@@ -86,15 +86,6 @@ export const Footer: React.FC<FooterProps> = ({
                   <span>{t.nav.contact}</span>
                 </button>
               </li>
-              <li>
-                <button
-                  onClick={() => setIsAdminOpen(true)}
-                  className="hover:text-amber-300 text-white/40 transition-colors cursor-pointer flex items-center gap-1.5 pt-1"
-                >
-                  <ShieldCheck className="w-3.5 h-3.5 text-amber-400/80" />
-                  <span>{t.nav.admin}</span>
-                </button>
-              </li>
             </ul>
           </div>
 
@@ -133,16 +124,20 @@ export const Footer: React.FC<FooterProps> = ({
                   </a>
                 </li>
               )}
-              {siteConfig.whatsapp && (
-                <li className="flex items-center gap-2 text-xs text-gray-400 font-mono hover:text-emerald-300 transition-colors">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0">
-                    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+              <li>
+                <a 
+                  href="https://wa.me/989190059314" 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="flex items-center gap-2 text-xs text-emerald-400/90 font-mono hover:text-emerald-300 transition-colors"
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0">
+                    <path d="M17.472 14.382c-.301-.15-1.78-.878-2.056-.979-.276-.1-.477-.15-.678.15-.201.3-.778.979-.954 1.18-.176.2-.352.226-.653.075-.3-.15-1.267-.467-2.414-1.49-1.048-.934-1.756-2.087-1.962-2.44-.206-.352-.022-.543.129-.693.136-.135.301-.352.452-.528.15-.176.201-.301.301-.502.1-.2.05-.377-.025-.528-.075-.15-.678-1.633-.929-2.235-.245-.586-.494-.506-.678-.515-.176-.009-.377-.009-.578-.009s-.527.075-.803.377c-.276.301-1.054 1.03-1.054 2.512 0 1.482 1.079 2.913 1.23 3.114.15.201 2.124 3.243 5.145 4.548.719.311 1.28.497 1.718.636.722.23 1.378.197 1.9.12.58-.087 1.78-.728 2.03-1.431.251-.703.251-1.306.176-1.431-.076-.126-.277-.201-.578-.352z"/>
+                    <path d="M12.004 2c-5.518 0-9.996 4.48-9.996 10 0 1.765.459 3.488 1.332 5.006L2 22l5.132-1.312c1.472.803 3.128 1.226 4.872 1.226 5.518 0 9.996-4.48 9.996-10S17.522 2 12.004 2zm0 18.176c-1.503 0-2.977-.406-4.262-1.173l-.306-.182-3.167.81.846-3.088-.199-.317a8.163 8.163 0 0 1-1.252-4.226c0-4.509 3.667-8.176 8.176-8.176 4.509 0 8.176 3.667 8.176 8.176 0 4.509-3.667 8.176-8.176 8.176z"/>
                   </svg>
-                  <a href={`https://wa.me/${siteConfig.whatsapp.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" dir="ltr" className="truncate">
-                    {siteConfig.whatsapp}
-                  </a>
-                </li>
-              )}
+                  <span dir="ltr">+98 919 0059314 (WhatsApp)</span>
+                </a>
+              </li>
               {siteConfig.email && (
                 <li className="flex items-center gap-2 text-xs text-gray-400 font-mono">
                   <Mail className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
@@ -173,19 +168,21 @@ export const Footer: React.FC<FooterProps> = ({
           </div>
         </div>
 
-        {/* Bottom Bar */}
-        <div className="pt-8 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-6">
-          <div className="text-[10px] uppercase tracking-[0.25em] text-white/40 text-center sm:text-left font-mono">
+        {/* Bottom Bar & Site Credits */}
+        <div className="pt-8 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="text-[10px] uppercase tracking-[0.2em] text-white/40 text-center sm:text-left font-mono">
             &copy; {new Date().getFullYear()} {isFa ? siteConfig.atelierNameFa : 'SAGHI ABYAR ATELIER'} &mdash; SAGHIABYAR.COM
           </div>
+
+          {/* Created by Saman Abyar Credit */}
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-[11px] font-mono text-amber-300/90 hover:text-amber-200 hover:border-amber-400/30 transition-all">
+            <Sparkles className="w-3 h-3 text-amber-400" />
+            <span>
+              {isFa ? 'طراحی و توسعه وب‌سایت: سامان آبیار' : 'Created & Engineered by Saman Abyar'}
+            </span>
+          </div>
+
           <div className="flex items-center space-x-4">
-            <button
-              onClick={() => setIsAdminOpen(true)}
-              className="w-10 h-10 rounded-full border border-white/10 flex items-center justify-center bg-white/5 hover:bg-white/10 cursor-pointer transition-colors"
-              title={t.nav.admin}
-            >
-              <ShieldCheck className="w-4 h-4 text-amber-400" />
-            </button>
             <button
               onClick={() => {
                 setActiveView('archive');

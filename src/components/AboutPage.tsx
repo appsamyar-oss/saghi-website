@@ -11,6 +11,7 @@ interface AboutPageProps {
 
 export const AboutPage: React.FC<AboutPageProps> = ({ setActiveView }) => {
   const { siteConfig, isFa, t, getLocalized } = useApp();
+  const [isPortraitLoaded, setIsPortraitLoaded] = React.useState(false);
 
   const disciplineIcons = [Music, Palette, Sparkles, Feather];
   const artistPortraitUrl = 'https://qf1mwtdvcbajjjdk.public.blob.vercel-storage.com/Art%20Gallery/753205968_17937444480315827_3004804003390789664_n.jpg';
@@ -99,30 +100,45 @@ export const AboutPage: React.FC<AboutPageProps> = ({ setActiveView }) => {
               whileInView={{ opacity: 1, scale: 1 }}
               viewport={{ once: true }}
               transition={{ duration: 0.8 }}
-              className="md:col-span-6 relative group"
+              className="md:col-span-6 relative group flex justify-center"
             >
-              <div className="absolute inset-0 bg-gradient-to-tr from-amber-500 to-rose-500 rounded-3xl transform rotate-1 blur-sm opacity-20 group-hover:opacity-40 transition-opacity duration-500" />
-              <div className="relative rounded-3xl overflow-hidden border border-white/15 shadow-2xl bg-zinc-950">
-                <div className="relative aspect-[4/5] sm:aspect-square md:aspect-[4/5] w-full overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-tr from-amber-500/20 via-amber-700/10 to-transparent rounded-3xl transform rotate-1 blur-md opacity-30 group-hover:opacity-50 transition-opacity duration-500" />
+              <div className="relative w-full max-w-lg rounded-3xl overflow-hidden border border-white/15 shadow-2xl bg-zinc-950/90 backdrop-blur-md p-3 sm:p-4">
+                <div className="relative w-full overflow-hidden rounded-2xl bg-zinc-900 aspect-[3/4] flex items-center justify-center">
+                  {/* Progressive Loading Placeholder Pulse */}
+                  {!isPortraitLoaded && (
+                    <div className="absolute inset-0 bg-zinc-900 animate-pulse flex items-center justify-center">
+                      <div className="w-10 h-10 rounded-full border border-amber-500/20 border-t-amber-400 animate-spin" />
+                    </div>
+                  )}
+
                   <img
                     src={artistPortraitUrl}
                     alt={isFa ? 'ساقی آبیار - استودیو هنر و تار' : 'Saghi Abyar - Fine Art & Tar Studio'}
                     referrerPolicy="no-referrer"
+                    decoding="async"
+                    fetchPriority="high"
+                    onLoad={() => setIsPortraitLoaded(true)}
                     onContextMenu={(e) => e.preventDefault()}
-                    className="w-full h-full object-cover pointer-events-none transition-transform duration-700 group-hover:scale-105"
+                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 480px"
+                    className={`w-full h-full object-cover object-top pointer-events-none transition-all duration-700 grayscale group-hover:grayscale-0 hover:grayscale-0 active:grayscale-0 ${
+                      isPortraitLoaded ? 'opacity-100 scale-100 blur-0' : 'opacity-0 scale-95 blur-md'
+                    } group-hover:scale-102`}
+                    style={{ imageRendering: 'auto' }}
                   />
                   {/* Anti-Theft Protective Transparent Overlay */}
                   <div
                     className="absolute inset-0 z-10 pointer-events-none"
                     onContextMenu={(e) => e.preventDefault()}
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 pointer-events-none z-10" />
+                  {/* Refined subtle bottom shadow for badge readability without dulling image clarity */}
+                  <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none z-10" />
 
-                  <div className="absolute bottom-4 left-4 right-4 z-20 flex items-center justify-between text-xs font-mono text-white/90">
-                    <span className="px-3 py-1 rounded-full bg-black/70 backdrop-blur-md border border-white/20 text-amber-300 font-bold">
+                  <div className="absolute bottom-3 left-3 right-3 z-20 flex items-center justify-between text-xs font-mono text-white/90">
+                    <span className="px-3 py-1 rounded-full bg-black/80 backdrop-blur-md border border-amber-400/30 text-amber-300 font-bold shadow-lg">
                       {isFa ? 'ساقی آبیار' : 'SAGHI ABYAR'}
                     </span>
-                    <span className="px-3 py-1 rounded-full bg-black/70 backdrop-blur-md border border-white/20 text-white/80">
+                    <span className="px-3 py-1 rounded-full bg-black/80 backdrop-blur-md border border-white/15 text-white/90 shadow-lg">
                       {isFa ? 'پرتره رسمی استودیو' : 'Studio Portrait'}
                     </span>
                   </div>

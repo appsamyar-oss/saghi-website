@@ -22,6 +22,7 @@ import {
   Unlock, 
   AlertCircle, 
   Eye, 
+  EyeOff,
   CheckCircle2, 
   PhoneCall, 
   Sparkles,
@@ -30,13 +31,27 @@ import {
   Palette,
   Copy,
   SlidersHorizontal,
-  CheckCheck
+  CheckCheck,
+  Globe,
+  KeyRound,
+  Volume2,
+  Feather,
+  Music,
+  ShoppingBag
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Artwork, AdminTab, CategoryItem, CommissionInquiry, BackgroundPrompt, BackgroundSettings } from '../../types';
 import { INITIAL_BACKGROUND_PROMPTS, INITIAL_BACKGROUND_SETTINGS } from '../../data/initialData';
 import { AuthScreen } from '../auth/AuthScreen';
 import { SaghiEmblemLogo } from '../SaghiEmblemLogo';
+import { EmailInquiriesTab } from './EmailInquiriesTab';
+import { PublishPreviewModal, PreviewPayload } from './PublishPreviewModal';
+import { 
+  saveAdminCredentialsToFirestore, 
+  getAdminCredentialsFromFirestore,
+  saveArtworkToFirestore,
+  saveSiteConfigToFirestore,
+} from '../../firebase';
 
 
 export const AdminModal: React.FC = () => {
@@ -49,6 +64,7 @@ export const AdminModal: React.FC = () => {
     loginAdmin,
     logoutAdmin,
     language,
+    setLanguage,
     isFa,
     t,
     artworks,
@@ -87,10 +103,6 @@ export const AdminModal: React.FC = () => {
   const [newCatLabelEn, setNewCatLabelEn] = useState('');
   const [newCatLabelFa, setNewCatLabelFa] = useState('');
 
-  // Inquiry Filter & Notes State
-  const [inquiryFilter, setInquiryFilter] = useState<'all' | 'new' | 'in_review' | 'contacted' | 'completed'>('all');
-  const [selectedInquiryNotes, setSelectedInquiryNotes] = useState<{ [id: string]: string }>({});
-
   // Branding Logo Upload Refs
   const logoFileInputRef = useRef<HTMLInputElement>(null);
   const darkLogoFileInputRef = useRef<HTMLInputElement>(null);
@@ -101,9 +113,75 @@ export const AdminModal: React.FC = () => {
   const [copiedPromptId, setCopiedPromptId] = useState<string | null>(null);
   const bgTextureInputRef = useRef<HTMLInputElement>(null);
 
+  // Admin Credentials Management State
+  const [adminUsernameInput, setAdminUsernameInput] = useState(siteConfig.adminCredentials?.username || 'saghi');
+  const [adminPasswordInput, setAdminPasswordInput] = useState(siteConfig.adminCredentials?.passwordHash || 'Saghi@Art2026');
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
+
+  // Preview Before Publish Modal State
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewDraft, setPreviewDraft] = useState<PreviewPayload | null>(null);
+
+  // Sync credentials from Firestore on admin panel mount
+  React.useEffect(() => {
+    let isMounted = true;
+    getAdminCredentialsFromFirestore().then((dbCreds) => {
+      if (isMounted && dbCreds?.username) {
+        setAdminUsernameInput(dbCreds.username);
+        if (dbCreds.password) {
+          setAdminPasswordInput(dbCreds.password);
+        }
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const handleConfirmPublish = async () => {
+    if (!previewDraft) return;
+
+    if (previewDraft.type === 'artwork') {
+      const artworkData = previewDraft.data;
+      if (previewDraft.isNew) {
+        addArtwork(artworkData);
+      } else {
+        updateArtwork(artworkData.id, artworkData);
+      }
+      try {
+        await saveArtworkToFirestore(artworkData);
+      } catch (err) {
+        console.warn('[AdminModal] Background Firestore artwork save notice:', err);
+      }
+      setEditingArtwork(null);
+      setIsCreatingArtwork(false);
+      setIsPreviewOpen(false);
+      setPreviewDraft(null);
+      showToast(
+        isFa 
+          ? 'اثر هنری با موفقیت در سایت و دیتابیس فایربیس منتشر شد' 
+          : 'Artwork successfully published live to gallery & Firebase!'
+      );
+    } else if (previewDraft.type === 'siteConfig') {
+      updateSiteConfig(previewDraft.data);
+      try {
+        await saveSiteConfigToFirestore(previewDraft.data);
+      } catch (err) {
+        console.warn('[AdminModal] Background Firestore siteConfig save notice:', err);
+      }
+      setIsPreviewOpen(false);
+      setPreviewDraft(null);
+      showToast(
+        isFa 
+          ? 'محتوا و هویت استودیو با موفقیت ذخیره و در فایربیس منتشر گردید' 
+          : 'Studio content & identity published live to Firebase!'
+      );
+    }
   };
 
   const handleLogin = (e: React.FormEvent) => {
@@ -189,12 +267,6 @@ export const AdminModal: React.FC = () => {
     return matchesCat && matchesQuery;
   });
 
-  // Filter inquiries
-  const filteredInquiries = inquiries.filter((inq) => {
-    if (inquiryFilter === 'all') return true;
-    return inq.status === inquiryFilter;
-  });
-
   if (!isAdminOpen) return null;
 
   return (
@@ -219,6 +291,7 @@ export const AdminModal: React.FC = () => {
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         className="w-full max-w-6xl max-h-[92vh] flex flex-col bg-zinc-950 border border-white/10 rounded-3xl shadow-2xl overflow-hidden text-white my-auto"
+        dir={isFa ? 'rtl' : 'ltr'}
       >
         {/* Modal Top Header */}
         <header className="px-6 py-4 border-b border-white/10 flex items-center justify-between bg-white/5 flex-shrink-0">
@@ -239,7 +312,21 @@ export const AdminModal: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
+            {/* Quick Bilingual Language Switcher */}
+            <button
+              onClick={() => {
+                const nextLang = isFa ? 'en' : 'fa';
+                setLanguage(nextLang);
+                showToast(nextLang === 'fa' ? 'زبان پنل مدیریت به فارسی تغییر یافت' : 'Admin language switched to English');
+              }}
+              className="px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 text-white/80 hover:text-white text-xs font-mono transition-colors flex items-center gap-1.5 cursor-pointer border border-white/10"
+              title={isFa ? 'Switch to English' : 'تغییر زبان به فارسی'}
+            >
+              <Globe className="w-3.5 h-3.5 text-amber-400" />
+              <span className="font-bold">{isFa ? 'English (EN)' : 'فارسی (FA)'}</span>
+            </button>
+
             {isAuthenticated && (
               <button
                 onClick={logoutAdmin}
@@ -378,41 +465,119 @@ export const AdminModal: React.FC = () => {
                         </div>
 
                         {/* Fields Form */}
-                        <div className="md:col-span-8 space-y-4">
-                          <div className="space-y-1">
-                            <label className="text-xs font-mono text-white/50 uppercase">
-                              {t.admin.fieldImageUrl}
-                            </label>
-                            <input
-                              type="text"
-                              value={editingArtwork?.imageUrl || ''}
-                              onChange={(e) =>
-                                setEditingArtwork(prev => prev ? { ...prev, imageUrl: e.target.value } : null)
-                              }
-                              placeholder="https://images.unsplash.com/..."
-                              className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-cyan-400 outline-none"
-                            />
+                        <div className="md:col-span-8 space-y-5">
+                          {/* Media Type & Media URLs */}
+                          <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-4">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <span className="text-xs font-mono text-amber-400 uppercase font-bold tracking-wider">
+                                {isFa ? 'نوع اثر / رسانه دیجیتال' : 'Media Type & Digital Master'}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                {(
+                                  [
+                                    { id: 'image', label: isFa ? 'نقاشی / تصویر' : 'Fine Art Image' },
+                                    { id: 'audio', label: isFa ? 'تکنوازی تار (صوتی)' : 'Tar Solo (Audio)' },
+                                    { id: 'video', label: isFa ? 'ویدیو اجرا' : 'Video Performance' },
+                                  ] as const
+                                ).map((mt) => (
+                                  <button
+                                    key={mt.id}
+                                    type="button"
+                                    onClick={() =>
+                                      setEditingArtwork(prev => prev ? { ...prev, mediaType: mt.id } : null)
+                                    }
+                                    className={`px-3 py-1.5 rounded-xl text-xs font-mono transition-all cursor-pointer ${
+                                      (editingArtwork?.mediaType || 'image') === mt.id
+                                        ? 'bg-amber-400 text-black font-bold shadow-md'
+                                        : 'bg-black/40 text-white/60 hover:text-white border border-white/10'
+                                    }`}
+                                  >
+                                    {mt.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-xs font-mono text-white/60 uppercase flex items-center justify-between">
+                                <span>{t.admin.fieldImageUrl} *</span>
+                                <span className="text-[10px] text-white/40">Cover Image / Poster</span>
+                              </label>
+                              <input
+                                type="text"
+                                value={editingArtwork?.imageUrl || ''}
+                                onChange={(e) =>
+                                  setEditingArtwork(prev => prev ? { ...prev, imageUrl: e.target.value } : null)
+                                }
+                                placeholder="https://images.unsplash.com/... or upload"
+                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none font-mono"
+                              />
+                            </div>
+
+                            {/* Additional URLs for Audio / Video */}
+                            {(editingArtwork?.mediaType === 'audio' || editingArtwork?.category === 'tar_music') && (
+                              <div className="space-y-1 pt-1 border-t border-white/5">
+                                <label className="text-xs font-mono text-cyan-400 uppercase flex items-center justify-between">
+                                  <span>{isFa ? 'آدرس فایل صوتی تار (HQ Audio Master URL)' : 'Tar Solo Audio URL (MP3/WAV/AAC)'}</span>
+                                  <span className="text-[10px] text-white/40">Direct MP3 Link</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  value={editingArtwork?.audioUrl || ''}
+                                  onChange={(e) =>
+                                    setEditingArtwork(prev => prev ? { ...prev, audioUrl: e.target.value } : null)
+                                  }
+                                  placeholder="https://.../tar-solo-master.mp3"
+                                  className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-cyan-300 focus:border-cyan-400 outline-none font-mono"
+                                />
+                              </div>
+                            )}
+
+                            {editingArtwork?.mediaType === 'video' && (
+                              <div className="space-y-1 pt-1 border-t border-white/5">
+                                <label className="text-xs font-mono text-rose-400 uppercase flex items-center justify-between">
+                                  <span>{isFa ? 'آدرس فایل تصویری (Video Performance URL)' : 'Video Performance URL (MP4 / WebM)'}</span>
+                                  <span className="text-[10px] text-white/40">Direct MP4 Link</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  value={editingArtwork?.videoUrl || ''}
+                                  onChange={(e) =>
+                                    setEditingArtwork(prev => prev ? { ...prev, videoUrl: e.target.value } : null)
+                                  }
+                                  placeholder="https://.../performance.mp4"
+                                  className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-rose-300 focus:border-rose-400 outline-none font-mono"
+                                />
+                              </div>
+                            )}
                           </div>
 
+                          {/* DUAL TITLE */}
                           <div className="grid sm:grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                              <label className="text-xs font-mono text-white/50 uppercase">
-                                {t.admin.fieldTitleEn} *
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-mono text-white/70 uppercase flex items-center justify-between">
+                                <span>{t.admin.fieldTitleEn} *</span>
+                                <span className="text-[10px] text-white/40 font-normal">LTR [English]</span>
                               </label>
                               <input
                                 type="text"
                                 required
-                                value={editingArtwork?.title || ''}
+                                value={editingArtwork?.titleEn ?? editingArtwork?.title ?? ''}
                                 onChange={(e) =>
-                                  setEditingArtwork(prev => prev ? { ...prev, title: e.target.value } : null)
+                                  setEditingArtwork(prev => prev ? { 
+                                    ...prev, 
+                                    title: e.target.value,
+                                    titleEn: e.target.value 
+                                  } : null)
                                 }
-                                placeholder="Minimalist Oil on Linen / Cubist Composition"
-                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-cyan-400 outline-none"
+                                placeholder="e.g. Minimalist Oil on Linen / Tar Improvisation in Esfahan"
+                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none"
                               />
                             </div>
-                            <div className="space-y-1">
-                              <label className="text-xs font-mono text-cyan-400 uppercase">
-                                {t.admin.fieldTitleFa} *
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-mono text-amber-400 uppercase flex items-center justify-between">
+                                <span>{t.admin.fieldTitleFa} *</span>
+                                <span className="text-[10px] text-amber-400/60 font-normal">RTL [فارسی]</span>
                               </label>
                               <input
                                 type="text"
@@ -421,66 +586,74 @@ export const AdminModal: React.FC = () => {
                                 onChange={(e) =>
                                   setEditingArtwork(prev => prev ? { ...prev, titleFa: e.target.value } : null)
                                 }
-                                placeholder="نقاشی مینیمال / کوبیسم معاصر"
-                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-cyan-400 outline-none font-fa"
+                                placeholder="مثال: بداهه‌نوازی تار در آواز بیات اصفهان / ترکیب کوبیسم"
+                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none font-fa"
                               />
                             </div>
                           </div>
 
+                          {/* DUAL SUBTITLE */}
                           <div className="grid sm:grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                              <label className="text-xs font-mono text-white/50 uppercase">
-                                {t.admin.fieldSubtitleEn}
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-mono text-white/70 uppercase flex items-center justify-between">
+                                <span>{t.admin.fieldSubtitleEn}</span>
+                                <span className="text-[10px] text-white/40 font-normal">LTR [English]</span>
                               </label>
-                              <input
-                                type="text"
-                                value={editingArtwork?.subtitle || ''}
+                              <textarea
+                                rows={4}
+                                value={editingArtwork?.subtitleEn ?? editingArtwork?.subtitle ?? ''}
                                 onChange={(e) =>
-                                  setEditingArtwork(prev => prev ? { ...prev, subtitle: e.target.value } : null)
+                                  setEditingArtwork(prev => prev ? { 
+                                    ...prev, 
+                                    subtitle: e.target.value,
+                                    subtitleEn: e.target.value 
+                                  } : null)
                                 }
-                                placeholder="Oil on Belgian Linen / Persian Tar Solo"
-                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-cyan-400 outline-none"
+                                placeholder="e.g. Persian Classical Tar Solo in Bayat-e Esfahan with Studio Acoustic Recording by Saghi Abyar"
+                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none resize-y min-h-[96px] leading-relaxed"
                               />
                             </div>
-                            <div className="space-y-1">
-                              <label className="text-xs font-mono text-cyan-400 uppercase">
-                                {t.admin.fieldSubtitleFa}
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-mono text-amber-400 uppercase flex items-center justify-between">
+                                <span>{t.admin.fieldSubtitleFa}</span>
+                                <span className="text-[10px] text-amber-400/60 font-normal">RTL [فارسی]</span>
                               </label>
-                              <input
-                                type="text"
+                              <textarea
+                                rows={4}
                                 dir="rtl"
                                 value={editingArtwork?.subtitleFa || ''}
                                 onChange={(e) =>
                                   setEditingArtwork(prev => prev ? { ...prev, subtitleFa: e.target.value } : null)
                                 }
-                                placeholder="رنگ‌روغن روی بوم کتان / تکنوازی تار ایرانی"
-                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-cyan-400 outline-none font-fa"
+                                placeholder="مثال: تکنوازی تار ایرانی در مایه بیات اصفهان، ضبط استودیویی با اجرای ساقی آبیار"
+                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none font-fa resize-y min-h-[96px] leading-relaxed"
                               />
                             </div>
                           </div>
 
+                          {/* CATEGORY, YEAR, DURATION */}
                           <div className="grid sm:grid-cols-3 gap-4">
-                            <div className="space-y-1">
-                              <label className="text-xs font-mono text-white/50 uppercase">
-                                {t.admin.fieldCategory}
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-mono text-white/70 uppercase">
+                                {t.admin.fieldCategory} *
                               </label>
                               <select
                                 value={editingArtwork?.category || 'minimalism'}
                                 onChange={(e) =>
                                   setEditingArtwork(prev => prev ? { ...prev, category: e.target.value } : null)
                                 }
-                                className="w-full bg-black/60 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:border-cyan-400 outline-none"
+                                className="w-full bg-black/60 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:border-amber-400 outline-none"
                               >
                                 {categories.filter(c => c.id !== 'all').map((cat) => (
-                                  <option key={cat.id} value={cat.id}>
-                                    {isFa ? cat.labelFa : cat.labelEn}
+                                  <option key={cat.id} value={cat.id} className="bg-zinc-950">
+                                    {isFa ? cat.labelFa : cat.labelEn} ({cat.id})
                                   </option>
                                 ))}
                               </select>
                             </div>
 
-                            <div className="space-y-1">
-                              <label className="text-xs font-mono text-white/50 uppercase">
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-mono text-white/70 uppercase">
                                 {t.admin.fieldYear}
                               </label>
                               <input
@@ -490,44 +663,51 @@ export const AdminModal: React.FC = () => {
                                   setEditingArtwork(prev => prev ? { ...prev, year: e.target.value } : null)
                                 }
                                 placeholder="2026"
-                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-cyan-400 outline-none"
+                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none font-mono"
                               />
                             </div>
 
-                            <div className="space-y-1">
-                              <label className="text-xs font-mono text-white/50 uppercase">
-                                {t.admin.fieldDimensions}
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-mono text-white/70 uppercase">
+                                {isFa ? 'مدت زمان اجرا (Duration)' : 'Duration (e.g. 06:42)'}
                               </label>
                               <input
                                 type="text"
-                                value={editingArtwork?.dimensions || ''}
+                                value={editingArtwork?.duration || ''}
                                 onChange={(e) =>
-                                  setEditingArtwork(prev => prev ? { ...prev, dimensions: e.target.value } : null)
+                                  setEditingArtwork(prev => prev ? { ...prev, duration: e.target.value } : null)
                                 }
-                                placeholder="120 × 90 cm"
-                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-cyan-400 outline-none"
+                                placeholder="06:42"
+                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none font-mono"
                               />
                             </div>
                           </div>
 
+                          {/* DUAL ARTIST */}
                           <div className="grid sm:grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                              <label className="text-xs font-mono text-white/50 uppercase">
-                                {t.admin.fieldArtistEn}
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-mono text-white/70 uppercase flex items-center justify-between">
+                                <span>{t.admin.fieldArtistEn}</span>
+                                <span className="text-[10px] text-white/40 font-normal">LTR [English]</span>
                               </label>
                               <input
                                 type="text"
-                                value={editingArtwork?.artist || ''}
+                                value={editingArtwork?.artistEn ?? editingArtwork?.artist ?? ''}
                                 onChange={(e) =>
-                                  setEditingArtwork(prev => prev ? { ...prev, artist: e.target.value } : null)
+                                  setEditingArtwork(prev => prev ? { 
+                                    ...prev, 
+                                    artist: e.target.value,
+                                    artistEn: e.target.value 
+                                  } : null)
                                 }
                                 placeholder="Saghi Abyar"
-                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-cyan-400 outline-none"
+                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none"
                               />
                             </div>
-                            <div className="space-y-1">
-                              <label className="text-xs font-mono text-cyan-400 uppercase">
-                                {t.admin.fieldArtistFa}
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-mono text-amber-400 uppercase flex items-center justify-between">
+                                <span>{t.admin.fieldArtistFa}</span>
+                                <span className="text-[10px] text-amber-400/60 font-normal">RTL [فارسی]</span>
                               </label>
                               <input
                                 type="text"
@@ -537,29 +717,36 @@ export const AdminModal: React.FC = () => {
                                   setEditingArtwork(prev => prev ? { ...prev, artistFa: e.target.value } : null)
                                 }
                                 placeholder="ساقی آبیار"
-                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-cyan-400 outline-none font-fa"
+                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none font-fa"
                               />
                             </div>
                           </div>
 
+                          {/* DUAL MEDIUM / INSTRUMENT */}
                           <div className="grid sm:grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                              <label className="text-xs font-mono text-white/50 uppercase">
-                                {t.admin.fieldMediumEn}
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-mono text-white/70 uppercase flex items-center justify-between">
+                                <span>{t.admin.fieldMediumEn}</span>
+                                <span className="text-[10px] text-white/40 font-normal">LTR [English]</span>
                               </label>
                               <input
                                 type="text"
-                                value={editingArtwork?.medium || ''}
+                                value={editingArtwork?.mediumEn ?? editingArtwork?.medium ?? ''}
                                 onChange={(e) =>
-                                  setEditingArtwork(prev => prev ? { ...prev, medium: e.target.value } : null)
+                                  setEditingArtwork(prev => prev ? { 
+                                    ...prev, 
+                                    medium: e.target.value,
+                                    mediumEn: e.target.value 
+                                  } : null)
                                 }
-                                placeholder="Oil & Pigments on Belgian Linen"
-                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-cyan-400 outline-none"
+                                placeholder="Oil & Palette Knife on Belgian Linen / Studio Master Solo"
+                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none"
                               />
                             </div>
-                            <div className="space-y-1">
-                              <label className="text-xs font-mono text-cyan-400 uppercase">
-                                {t.admin.fieldMediumFa}
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-mono text-amber-400 uppercase flex items-center justify-between">
+                                <span>{t.admin.fieldMediumFa}</span>
+                                <span className="text-[10px] text-amber-400/60 font-normal">RTL [فارسی]</span>
                               </label>
                               <input
                                 type="text"
@@ -568,47 +755,213 @@ export const AdminModal: React.FC = () => {
                                 onChange={(e) =>
                                   setEditingArtwork(prev => prev ? { ...prev, mediumFa: e.target.value } : null)
                                 }
-                                placeholder="رنگ‌روغن، کاردک و رنگدانه‌ها روی بوم کتان"
-                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-cyan-400 outline-none font-fa"
+                                placeholder="رنگ‌روغن و کاردک روی بوم کتان / تکنوازی ضبط استودیویی"
+                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none font-fa"
+                              />
+                            </div>
+                          </div>
+
+                          {/* TAR MUSIC SPECIFICS: DASTGAH & INSTRUMENT & PERFORMANCE TYPE */}
+                          {(editingArtwork?.category === 'tar_music' || editingArtwork?.mediaType === 'audio' || editingArtwork?.mediaType === 'video') && (
+                            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 space-y-4">
+                              <span className="text-xs font-mono text-amber-300 font-bold uppercase tracking-wider block">
+                                {isFa ? 'مشخصات تخصصی دستگاه موسیقی و ساز تار' : 'Tar Musical System & Dastgah Specifics'}
+                              </span>
+
+                              <div className="grid sm:grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                  <label className="text-[11px] font-mono text-white/70 uppercase">
+                                    Dastgah / Mode (English)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={editingArtwork?.dastgahEn ?? editingArtwork?.dastgah ?? ''}
+                                    onChange={(e) =>
+                                      setEditingArtwork(prev => prev ? { 
+                                        ...prev, 
+                                        dastgah: e.target.value,
+                                        dastgahEn: e.target.value 
+                                      } : null)
+                                    }
+                                    placeholder="Bayat-e Esfahan (Homayoun)"
+                                    className="w-full bg-black/70 border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white focus:border-amber-400 outline-none"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[11px] font-mono text-amber-400 uppercase">
+                                    دستگاه / آواز موسیقی (فارسی)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    dir="rtl"
+                                    value={editingArtwork?.dastgahFa || ''}
+                                    onChange={(e) =>
+                                      setEditingArtwork(prev => prev ? { ...prev, dastgahFa: e.target.value } : null)
+                                    }
+                                    placeholder="آواز بیات اصفهان (دستگاه همایون)"
+                                    className="w-full bg-black/70 border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white focus:border-amber-400 outline-none font-fa"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="grid sm:grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                  <label className="text-[11px] font-mono text-white/70 uppercase">
+                                    Instrument Details (English)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={editingArtwork?.instrumentEn ?? editingArtwork?.instrument ?? ''}
+                                    onChange={(e) =>
+                                      setEditingArtwork(prev => prev ? { 
+                                        ...prev, 
+                                        instrument: e.target.value,
+                                        instrumentEn: e.target.value 
+                                      } : null)
+                                    }
+                                    placeholder="Master Persian Tar (Mulberry Wood)"
+                                    className="w-full bg-black/70 border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white focus:border-amber-400 outline-none"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[11px] font-mono text-amber-400 uppercase">
+                                    مشخصات ساز تار (فارسی)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    dir="rtl"
+                                    value={editingArtwork?.instrumentFa || ''}
+                                    onChange={(e) =>
+                                      setEditingArtwork(prev => prev ? { ...prev, instrumentFa: e.target.value } : null)
+                                    }
+                                    placeholder="تار کاسه بزرگ چوب توت کهنه ساخت استاد"
+                                    className="w-full bg-black/70 border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white focus:border-amber-400 outline-none font-fa"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* DUAL DIMENSIONS & DUAL PRICE */}
+                          <div className="grid sm:grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-mono text-white/70 uppercase flex items-center justify-between">
+                                <span>{t.admin.fieldDimensions} [En]</span>
+                                <span className="text-[10px] text-white/40">120 × 90 cm</span>
+                              </label>
+                              <input
+                                type="text"
+                                value={editingArtwork?.dimensionsEn ?? editingArtwork?.dimensions ?? ''}
+                                onChange={(e) =>
+                                  setEditingArtwork(prev => prev ? { 
+                                    ...prev, 
+                                    dimensions: e.target.value,
+                                    dimensionsEn: e.target.value 
+                                  } : null)
+                                }
+                                placeholder="120 × 90 cm / Studio Recording"
+                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none font-mono"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-mono text-amber-400 uppercase flex items-center justify-between">
+                                <span>{isFa ? 'ابعاد و اندازه (فارسی)' : 'Dimensions (Fa)'}</span>
+                                <span className="text-[10px] text-amber-400/60">۱۲۰ × ۹۰ سانتی‌متر</span>
+                              </label>
+                              <input
+                                type="text"
+                                dir="rtl"
+                                value={editingArtwork?.dimensionsFa || ''}
+                                onChange={(e) =>
+                                  setEditingArtwork(prev => prev ? { ...prev, dimensionsFa: e.target.value } : null)
+                                }
+                                placeholder="۱۲۰ × ۹۰ سانتی‌متر / قطعه استودیویی"
+                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none font-fa"
                               />
                             </div>
                           </div>
 
                           <div className="grid sm:grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                              <label className="text-xs font-mono text-white/50 uppercase">
-                                {t.admin.fieldOriginEn}
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-mono text-white/70 uppercase flex items-center justify-between">
+                                <span>Price / Acquisition Details [En]</span>
+                                <span className="text-[10px] text-white/40">USD / Inquire</span>
                               </label>
                               <input
                                 type="text"
-                                value={editingArtwork?.culturalOrigin || ''}
+                                value={editingArtwork?.priceEn ?? editingArtwork?.price ?? ''}
                                 onChange={(e) =>
-                                  setEditingArtwork(prev => prev ? { ...prev, culturalOrigin: e.target.value } : null)
+                                  setEditingArtwork(prev => prev ? { 
+                                    ...prev, 
+                                    price: e.target.value,
+                                    priceEn: e.target.value 
+                                  } : null)
                                 }
-                                placeholder="Isfahan & Shiraz Classical School"
-                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-cyan-400 outline-none"
+                                placeholder="Available for Acquisition / Inquire"
+                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none"
                               />
                             </div>
-                            <div className="space-y-1">
-                              <label className="text-xs font-mono text-cyan-400 uppercase">
-                                {t.admin.fieldOriginFa}
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-mono text-amber-400 uppercase flex items-center justify-between">
+                                <span>{isFa ? 'قیمت و شرایط واگذاری (فارسی)' : 'Price (Fa)'}</span>
+                                <span className="text-[10px] text-amber-400/60">درخواست سفارش / استعلام</span>
                               </label>
                               <input
                                 type="text"
+                                dir="rtl"
+                                value={editingArtwork?.priceFa || ''}
+                                onChange={(e) =>
+                                  setEditingArtwork(prev => prev ? { ...prev, priceFa: e.target.value } : null)
+                                }
+                                placeholder="آماده برای واگذاری به کلکسیون / استعلام قیمت"
+                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none font-fa"
+                              />
+                            </div>
+                          </div>
+
+                          {/* DUAL ORIGIN & PROVENANCE */}
+                          <div className="grid sm:grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-mono text-white/70 uppercase flex items-center justify-between">
+                                <span>{t.admin.fieldOriginEn}</span>
+                                <span className="text-[10px] text-white/40">LTR [English]</span>
+                              </label>
+                              <textarea
+                                rows={4}
+                                value={editingArtwork?.culturalOriginEn ?? editingArtwork?.culturalOrigin ?? ''}
+                                onChange={(e) =>
+                                  setEditingArtwork(prev => prev ? { 
+                                    ...prev, 
+                                    culturalOrigin: e.target.value,
+                                    culturalOriginEn: e.target.value 
+                                  } : null)
+                                }
+                                placeholder="Isfahan & Shiraz Classical School / Radif / Saghi Abyar Studio Series"
+                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none resize-y min-h-[96px] leading-relaxed"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-mono text-amber-400 uppercase flex items-center justify-between">
+                                <span>{t.admin.fieldOriginFa}</span>
+                                <span className="text-[10px] text-amber-400/60">RTL [فارسی]</span>
+                              </label>
+                              <textarea
+                                rows={4}
                                 dir="rtl"
                                 value={editingArtwork?.culturalOriginFa || ''}
                                 onChange={(e) =>
                                   setEditingArtwork(prev => prev ? { ...prev, culturalOriginFa: e.target.value } : null)
                                 }
-                                placeholder="مکتب کلاسیک اصفهان و شیراز"
-                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-cyan-400 outline-none font-fa"
+                                placeholder="مکتب اصیل موسیقی و هنرهای تجسمی معاصر ایران / مجموعه اختصاصی آتلیه ساقی آبیار"
+                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none font-fa resize-y min-h-[96px] leading-relaxed"
                               />
                             </div>
                           </div>
 
-                          <div className="space-y-1">
-                            <label className="text-xs font-mono text-white/50 uppercase">
-                              {t.admin.fieldTags}
+                          {/* TAGS */}
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-mono text-white/70 uppercase">
+                              {t.admin.fieldTags} (Comma-separated)
                             </label>
                             <input
                               type="text"
@@ -619,82 +972,153 @@ export const AdminModal: React.FC = () => {
                                   tags: e.target.value.split(',').map(s => s.trim()).filter(Boolean)
                                 } : null)
                               }
-                              placeholder="Nastaliq, Tazhib, Gold Leaf, Persian"
-                              className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-cyan-400 outline-none"
+                              placeholder="Tar, Persian Music, Minimalism, Cubism, Gold Leaf, Contemporary"
+                              className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none font-mono"
                             />
                           </div>
 
+                          {/* DUAL DESCRIPTION / ARTIST NARRATIVE */}
                           <div className="grid sm:grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                              <label className="text-xs font-mono text-white/50 uppercase">
-                                {t.admin.fieldDescEn}
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-mono text-white/70 uppercase flex items-center justify-between">
+                                <span>{t.admin.fieldDescEn}</span>
+                                <span className="text-[10px] text-white/40 font-normal">LTR [English]</span>
                               </label>
                               <textarea
-                                rows={3}
-                                value={editingArtwork?.description || ''}
+                                rows={6}
+                                value={editingArtwork?.descriptionEn ?? editingArtwork?.description ?? ''}
                                 onChange={(e) =>
-                                  setEditingArtwork(prev => prev ? { ...prev, description: e.target.value } : null)
+                                  setEditingArtwork(prev => prev ? { 
+                                    ...prev, 
+                                    description: e.target.value,
+                                    descriptionEn: e.target.value 
+                                  } : null)
                                 }
-                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-cyan-400 outline-none"
+                                placeholder="Detailed narrative and artistic context behind this work, curatorial statement, musical interpretation, or technique..."
+                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:border-amber-400 outline-none leading-relaxed resize-y min-h-[140px]"
                               />
                             </div>
-                            <div className="space-y-1">
-                              <label className="text-xs font-mono text-cyan-400 uppercase">
-                                {t.admin.fieldDescFa}
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-mono text-amber-400 uppercase flex items-center justify-between">
+                                <span>{t.admin.fieldDescFa}</span>
+                                <span className="text-[10px] text-amber-400/60 font-normal">RTL [فارسی]</span>
                               </label>
                               <textarea
-                                rows={3}
+                                rows={6}
                                 dir="rtl"
                                 value={editingArtwork?.descriptionFa || ''}
                                 onChange={(e) =>
                                   setEditingArtwork(prev => prev ? { ...prev, descriptionFa: e.target.value } : null)
                                 }
-                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-cyan-400 outline-none font-fa"
+                                placeholder="بیانیه هنری، توصیف حس‌وحال، ارتعاش تار، ظرایف پرده‌بندی یا بافت‌های رنگ‌روغن و فلسفه خلق اثر..."
+                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:border-amber-400 outline-none font-fa leading-relaxed resize-y min-h-[140px]"
                               />
                             </div>
                           </div>
 
-                          {/* Featured Toggle */}
-                          <div className="flex items-center gap-3 pt-2">
-                            <input
-                              type="checkbox"
-                              id="featuredToggle"
-                              checked={editingArtwork?.featured || false}
-                              onChange={(e) =>
-                                setEditingArtwork(prev => prev ? { ...prev, featured: e.target.checked } : null)
-                              }
-                              className="w-4 h-4 rounded bg-black/60 border-white/20 text-cyan-500 focus:ring-0 cursor-pointer"
-                            />
-                            <label htmlFor="featuredToggle" className="text-xs text-white/80 font-mono cursor-pointer flex items-center gap-1.5">
-                              <Star className="w-3.5 h-3.5 text-amber-400" />
-                              {t.admin.fieldFeatured}
-                            </label>
+                          {/* STATUS, FEATURED & COMMISSION TOGGLES */}
+                          <div className="p-4 rounded-2xl bg-white/5 border border-white/10 flex flex-wrap items-center justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                              <span className="text-xs font-mono text-white/60 uppercase">Status:</span>
+                              <select
+                                value={editingArtwork?.status || 'available'}
+                                onChange={(e) =>
+                                  setEditingArtwork(prev => prev ? { ...prev, status: e.target.value as any } : null)
+                                }
+                                className="bg-black border border-white/10 rounded-xl px-3 py-1.5 text-xs text-amber-300 font-mono outline-none"
+                              >
+                                <option value="available">Available / آماده واگذاری</option>
+                                <option value="reserved">Reserved / رزرو شده</option>
+                                <option value="archive">Archive / در مجموعه خصوصی</option>
+                                <option value="commissioned">Commissioned / سفارش اختصاصی</option>
+                              </select>
+                            </div>
+
+                            <div className="flex items-center gap-5">
+                              <label className="flex items-center gap-2 text-xs text-white/80 font-mono cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={editingArtwork?.featured || false}
+                                  onChange={(e) =>
+                                    setEditingArtwork(prev => prev ? { ...prev, featured: e.target.checked } : null)
+                                  }
+                                  className="w-4 h-4 rounded bg-black/60 border-white/20 text-amber-400 cursor-pointer accent-amber-400"
+                                />
+                                <Star className="w-3.5 h-3.5 text-amber-400" />
+                                <span>{t.admin.fieldFeatured}</span>
+                              </label>
+
+                              <label className="flex items-center gap-2 text-xs text-white/80 font-mono cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={editingArtwork?.canPurchase ?? true}
+                                  onChange={(e) =>
+                                    setEditingArtwork(prev => prev ? { ...prev, canPurchase: e.target.checked } : null)
+                                  }
+                                  className="w-4 h-4 rounded bg-black/60 border-white/20 text-amber-400 cursor-pointer accent-amber-400"
+                                />
+                                <span>Allow Inquiries</span>
+                              </label>
+                            </div>
                           </div>
 
-                          {/* Save / Submit Button */}
-                          <div className="pt-4 flex items-center justify-end gap-3">
+                          {/* Save / Submit Button -> Routes to Preview Before Publish Modal */}
+                          <div className="pt-2 flex items-center justify-end gap-3">
                             <button
                               type="button"
                               onClick={() => {
                                 if (!editingArtwork) return;
-                                if (!editingArtwork.title) {
-                                  alert('Title is required');
+                                const titleVal = editingArtwork.titleEn || editingArtwork.title;
+                                if (!titleVal && !editingArtwork.titleFa) {
+                                  alert(isFa ? 'عنوان اثر الزامی است' : 'Title is required');
                                   return;
                                 }
-                                if (isCreatingArtwork) {
-                                  addArtwork(editingArtwork);
-                                  showToast(isFa ? 'اثر جدید با موفقیت اضافه شد' : 'Artwork added successfully');
-                                } else {
-                                  updateArtwork(editingArtwork.id, editingArtwork);
-                                  showToast(isFa ? 'تغییرات اثر ذخیره گردید' : 'Artwork updated successfully');
-                                }
-                                setEditingArtwork(null);
-                                setIsCreatingArtwork(false);
+                                const completeArtwork: Artwork = {
+                                  ...editingArtwork,
+                                  title: titleVal || editingArtwork.titleFa || 'Untitled',
+                                  titleEn: titleVal || editingArtwork.titleFa || 'Untitled',
+                                  titleFa: editingArtwork.titleFa || titleVal || '',
+                                  subtitle: editingArtwork.subtitleEn || editingArtwork.subtitle || '',
+                                  subtitleEn: editingArtwork.subtitleEn || editingArtwork.subtitle || '',
+                                  subtitleFa: editingArtwork.subtitleFa || '',
+                                  description: editingArtwork.descriptionEn || editingArtwork.description || '',
+                                  descriptionEn: editingArtwork.descriptionEn || editingArtwork.description || '',
+                                  descriptionFa: editingArtwork.descriptionFa || '',
+                                  medium: editingArtwork.mediumEn || editingArtwork.medium || 'Oil on Linen',
+                                  mediumEn: editingArtwork.mediumEn || editingArtwork.medium || 'Oil on Linen',
+                                  mediumFa: editingArtwork.mediumFa || '',
+                                  artist: editingArtwork.artistEn || editingArtwork.artist || 'Saghi Abyar',
+                                  artistEn: editingArtwork.artistEn || editingArtwork.artist || 'Saghi Abyar',
+                                  artistFa: editingArtwork.artistFa || 'ساقی آبیار',
+                                  culturalOrigin: editingArtwork.culturalOriginEn || editingArtwork.culturalOrigin || '',
+                                  culturalOriginEn: editingArtwork.culturalOriginEn || editingArtwork.culturalOrigin || '',
+                                  culturalOriginFa: editingArtwork.culturalOriginFa || '',
+                                  dimensions: editingArtwork.dimensionsEn || editingArtwork.dimensions || '',
+                                  dimensionsEn: editingArtwork.dimensionsEn || editingArtwork.dimensions || '',
+                                  dimensionsFa: editingArtwork.dimensionsFa || '',
+                                  price: editingArtwork.priceEn || editingArtwork.price || '',
+                                  priceEn: editingArtwork.priceEn || editingArtwork.price || '',
+                                  priceFa: editingArtwork.priceFa || '',
+                                  dastgah: editingArtwork.dastgahEn || editingArtwork.dastgah || '',
+                                  dastgahEn: editingArtwork.dastgahEn || editingArtwork.dastgah || '',
+                                  dastgahFa: editingArtwork.dastgahFa || '',
+                                  instrument: editingArtwork.instrumentEn || editingArtwork.instrument || '',
+                                  instrumentEn: editingArtwork.instrumentEn || editingArtwork.instrument || '',
+                                  instrumentFa: editingArtwork.instrumentFa || '',
+                                };
+
+                                // Intercept save -> open preview modal
+                                setPreviewDraft({
+                                  type: 'artwork',
+                                  data: completeArtwork,
+                                  isNew: isCreatingArtwork,
+                                });
+                                setIsPreviewOpen(true);
                               }}
-                              className="px-8 py-3 bg-white text-black hover:bg-gray-200 rounded-full font-bold text-xs uppercase tracking-widest font-mono transition-all flex items-center gap-2 cursor-pointer shadow-lg"
+                              className="px-8 py-3 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black font-bold text-xs uppercase tracking-widest font-mono transition-all flex items-center gap-2 cursor-pointer shadow-lg rounded-full"
                             >
-                              <Save className="w-4 h-4" />
-                              {t.admin.saveArtworkBtn}
+                              <Eye className="w-4 h-4" />
+                              <span>{isFa ? 'پیش‌نمایش قبل از انتشار' : 'Preview Before Publish'}</span>
                             </button>
                           </div>
                         </div>
@@ -929,83 +1353,366 @@ export const AdminModal: React.FC = () => {
               {adminTab === 'content' && (
                 <div className="space-y-6">
                   <div className="p-6 rounded-3xl bg-white/5 border border-white/10 space-y-6">
-                    <h3 className="text-base font-bold font-mono text-cyan-400 uppercase tracking-wide">
-                      {t.admin.contentTitle}
-                    </h3>
-
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <label className="text-xs font-mono text-white/50 uppercase">{t.admin.heroHeadlineEn}</label>
-                        <input
-                          type="text"
-                          value={siteConfig.heroHeadlineEn}
-                          onChange={(e) => updateSiteConfig({ heroHeadlineEn: e.target.value })}
-                          className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-cyan-400 outline-none"
-                        />
+                    <div className="border-b border-white/10 pb-4 flex items-center justify-between">
+                      <div>
+                        <h3 className="text-base font-bold font-mono text-amber-400 uppercase tracking-wide">
+                          {t.admin.contentTitle}
+                        </h3>
+                        <p className="text-xs text-white/50 font-light mt-1">
+                          {isFa ? 'مدیریت و ویرایش متون، بیانیه، معرفی و اطلاعات هویت دو زبانه استودیو' : 'Manage and customize bilingual studio texts, identity, statements, and quotes'}
+                        </p>
                       </div>
-                      <div className="space-y-1">
-                        <label className="text-xs font-mono text-cyan-400 uppercase">{t.admin.heroHeadlineFa}</label>
-                        <input
-                          type="text"
-                          dir="rtl"
-                          value={siteConfig.heroHeadlineFa}
-                          onChange={(e) => updateSiteConfig({ heroHeadlineFa: e.target.value })}
-                          className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-cyan-400 outline-none font-fa"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <label className="text-xs font-mono text-white/50 uppercase">{t.admin.heroSubtitleEn}</label>
-                        <input
-                          type="text"
-                          value={siteConfig.heroSubtitleEn}
-                          onChange={(e) => updateSiteConfig({ heroSubtitleEn: e.target.value })}
-                          className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-cyan-400 outline-none"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs font-mono text-cyan-400 uppercase">{t.admin.heroSubtitleFa}</label>
-                        <input
-                          type="text"
-                          dir="rtl"
-                          value={siteConfig.heroSubtitleFa}
-                          onChange={(e) => updateSiteConfig({ heroSubtitleFa: e.target.value })}
-                          className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-cyan-400 outline-none font-fa"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <label className="text-xs font-mono text-white/50 uppercase">{t.admin.aboutQuoteEn}</label>
-                        <input
-                          type="text"
-                          value={siteConfig.quoteEn}
-                          onChange={(e) => updateSiteConfig({ quoteEn: e.target.value })}
-                          className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-cyan-400 outline-none"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs font-mono text-cyan-400 uppercase">{t.admin.aboutQuoteFa}</label>
-                        <input
-                          type="text"
-                          dir="rtl"
-                          value={siteConfig.quoteFa}
-                          onChange={(e) => updateSiteConfig({ quoteFa: e.target.value })}
-                          className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-cyan-400 outline-none font-fa"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="pt-2">
                       <button
-                        onClick={() => showToast(t.admin.toastSaved)}
-                        className="px-8 py-3 bg-white text-black hover:bg-gray-200 rounded-full font-bold text-xs uppercase tracking-widest font-mono cursor-pointer transition-all flex items-center gap-2"
+                        type="button"
+                        onClick={() => {
+                          setPreviewDraft({
+                            type: 'siteConfig',
+                            data: siteConfig,
+                          });
+                          setIsPreviewOpen(true);
+                        }}
+                        className="px-6 py-2.5 bg-amber-400 hover:bg-amber-300 text-black rounded-full font-bold text-xs uppercase tracking-widest font-mono cursor-pointer transition-all flex items-center gap-2 shadow-lg"
                       >
-                        <Save className="w-4 h-4" />
-                        {t.admin.saveContentBtn}
+                        <Eye className="w-4 h-4" />
+                        <span>{isFa ? 'پیش‌نمایش قبل از انتشار' : 'Preview Before Publish'}</span>
+                      </button>
+                    </div>
+
+                    {/* Section 1: Artist & Studio Identity */}
+                    <div className="space-y-4">
+                      <h4 className="text-xs font-mono uppercase text-amber-300 tracking-wider flex items-center gap-2">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>{isFa ? '۱. هویت هنرمند و عنوان استودیو' : '1. Artist & Atelier Identity'}</span>
+                      </h4>
+
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-mono text-white/70 uppercase flex items-center justify-between">
+                            <span>Artist Name (English)</span>
+                            <span className="text-[10px] text-white/40">LTR</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={siteConfig.artistNameEn}
+                            onChange={(e) => updateSiteConfig({ artistNameEn: e.target.value })}
+                            className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-mono text-amber-400 uppercase flex items-center justify-between">
+                            <span>نام هنرمند (فارسی)</span>
+                            <span className="text-[10px] text-amber-400/60">RTL</span>
+                          </label>
+                          <input
+                            type="text"
+                            dir="rtl"
+                            value={siteConfig.artistNameFa}
+                            onChange={(e) => updateSiteConfig({ artistNameFa: e.target.value })}
+                            className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none font-fa"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-mono text-white/70 uppercase flex items-center justify-between">
+                            <span>Atelier Name (English)</span>
+                            <span className="text-[10px] text-white/40">LTR</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={siteConfig.atelierNameEn}
+                            onChange={(e) => updateSiteConfig({ atelierNameEn: e.target.value })}
+                            className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-mono text-amber-400 uppercase flex items-center justify-between">
+                            <span>نام آتلیه و استودیو (فارسی)</span>
+                            <span className="text-[10px] text-amber-400/60">RTL</span>
+                          </label>
+                          <input
+                            type="text"
+                            dir="rtl"
+                            value={siteConfig.atelierNameFa}
+                            onChange={(e) => updateSiteConfig({ atelierNameFa: e.target.value })}
+                            className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none font-fa"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Section 2: Hero Banner */}
+                    <div className="space-y-4 pt-4 border-t border-white/10">
+                      <h4 className="text-xs font-mono uppercase text-amber-300 tracking-wider flex items-center gap-2">
+                        <Palette className="w-3.5 h-3.5" />
+                        <span>{isFa ? '۲. تیترها و متون بنر صفحه اصلی (Hero Section)' : '2. Hero Banner Headline & Subtitles'}</span>
+                      </h4>
+
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-mono text-white/70 uppercase flex items-center justify-between">
+                            <span>{t.admin.heroHeadlineEn}</span>
+                            <span className="text-[10px] text-white/40">LTR</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={siteConfig.heroHeadlineEn}
+                            onChange={(e) => updateSiteConfig({ heroHeadlineEn: e.target.value })}
+                            className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-mono text-amber-400 uppercase flex items-center justify-between">
+                            <span>{t.admin.heroHeadlineFa}</span>
+                            <span className="text-[10px] text-amber-400/60">RTL</span>
+                          </label>
+                          <input
+                            type="text"
+                            dir="rtl"
+                            value={siteConfig.heroHeadlineFa}
+                            onChange={(e) => updateSiteConfig({ heroHeadlineFa: e.target.value })}
+                            className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none font-fa"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-mono text-white/70 uppercase flex items-center justify-between">
+                            <span>{t.admin.heroSubtitleEn}</span>
+                            <span className="text-[10px] text-white/40">LTR</span>
+                          </label>
+                          <textarea
+                            rows={4}
+                            value={siteConfig.heroSubtitleEn}
+                            onChange={(e) => updateSiteConfig({ heroSubtitleEn: e.target.value })}
+                            className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none resize-y min-h-[96px] leading-relaxed"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-mono text-amber-400 uppercase flex items-center justify-between">
+                            <span>{t.admin.heroSubtitleFa}</span>
+                            <span className="text-[10px] text-amber-400/60">RTL</span>
+                          </label>
+                          <textarea
+                            rows={4}
+                            dir="rtl"
+                            value={siteConfig.heroSubtitleFa}
+                            onChange={(e) => updateSiteConfig({ heroSubtitleFa: e.target.value })}
+                            className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none font-fa resize-y min-h-[96px] leading-relaxed"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Section 3: Announcement Top Bar */}
+                    <div className="space-y-4 pt-4 border-t border-white/10">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-mono uppercase text-amber-300 tracking-wider flex items-center gap-2">
+                          <Volume2 className="w-3.5 h-3.5" />
+                          <span>{isFa ? '۳. نوار اعلان بالای سایت (Top Announcement Bar)' : '3. Top Announcement Bar'}</span>
+                        </h4>
+                        <label className="flex items-center gap-2 text-xs font-mono text-white/80 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={siteConfig.announcementBanner?.enabled ?? false}
+                            onChange={(e) => {
+                              const cur = siteConfig.announcementBanner || { enabled: false, textEn: '', textFa: '', type: 'info' };
+                              updateSiteConfig({ announcementBanner: { ...cur, enabled: e.target.checked } });
+                            }}
+                            className="w-4 h-4 rounded bg-black/60 border-white/20 text-amber-400 cursor-pointer accent-amber-400"
+                          />
+                          <span>{isFa ? 'فعال‌سازی نوار اعلان' : 'Enable Top Bar'}</span>
+                        </label>
+                      </div>
+
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-mono text-white/70 uppercase">Announcement Text (English)</label>
+                          <textarea
+                            rows={3}
+                            value={siteConfig.announcementBanner?.textEn || ''}
+                            onChange={(e) => {
+                              const cur = siteConfig.announcementBanner || { enabled: true, textEn: '', textFa: '', type: 'info' };
+                              updateSiteConfig({ announcementBanner: { ...cur, textEn: e.target.value } });
+                            }}
+                            placeholder="e.g. New Classical Tar Solos & 2026 Collection Available"
+                            className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none resize-y min-h-[72px] leading-relaxed"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-mono text-amber-400 uppercase">متن اعلان بالای سایت (فارسی)</label>
+                          <textarea
+                            rows={3}
+                            dir="rtl"
+                            value={siteConfig.announcementBanner?.textFa || ''}
+                            onChange={(e) => {
+                              const cur = siteConfig.announcementBanner || { enabled: true, textEn: '', textFa: '', type: 'info' };
+                              updateSiteConfig({ announcementBanner: { ...cur, textFa: e.target.value } });
+                            }}
+                            placeholder="مثال: انتشار قطعات جدید تکنوازی تار و آثار نقاشی ۲۰۲۶"
+                            className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none font-fa resize-y min-h-[72px] leading-relaxed"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Section 4: Studio Philosophy Quote */}
+                    <div className="space-y-4 pt-4 border-t border-white/10">
+                      <h4 className="text-xs font-mono uppercase text-amber-300 tracking-wider flex items-center gap-2">
+                        <Feather className="w-3.5 h-3.5" />
+                        <span>{isFa ? '۴. نقل‌قول و بیانیه فلسفه هنری' : '4. Philosophy & Studio Quote'}</span>
+                      </h4>
+
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-mono text-white/70 uppercase flex items-center justify-between">
+                            <span>{t.admin.aboutQuoteEn}</span>
+                            <span className="text-[10px] text-white/40">LTR</span>
+                          </label>
+                          <textarea
+                            rows={5}
+                            value={siteConfig.quoteEn}
+                            onChange={(e) => updateSiteConfig({ quoteEn: e.target.value })}
+                            className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none resize-y min-h-[120px] leading-relaxed"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-mono text-amber-400 uppercase flex items-center justify-between">
+                            <span>{t.admin.aboutQuoteFa}</span>
+                            <span className="text-[10px] text-amber-400/60">RTL</span>
+                          </label>
+                          <textarea
+                            rows={5}
+                            dir="rtl"
+                            value={siteConfig.quoteFa}
+                            onChange={(e) => updateSiteConfig({ quoteFa: e.target.value })}
+                            className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none font-fa resize-y min-h-[120px] leading-relaxed"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-mono text-white/70 uppercase">Quote Attribution (English)</label>
+                          <textarea
+                            rows={2}
+                            value={siteConfig.quoteAuthorEn || ''}
+                            onChange={(e) => updateSiteConfig({ quoteAuthorEn: e.target.value })}
+                            placeholder="Saghi Abyar — Studio Statement"
+                            className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none resize-y min-h-[60px]"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-mono text-amber-400 uppercase">امضای نقل‌قول (فارسی)</label>
+                          <textarea
+                            rows={2}
+                            dir="rtl"
+                            value={siteConfig.quoteAuthorFa || ''}
+                            onChange={(e) => updateSiteConfig({ quoteAuthorFa: e.target.value })}
+                            placeholder="ساقی آبیار — گزیده‌ای از بیانیه هنری"
+                            className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-400 outline-none font-fa resize-y min-h-[60px]"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Section 5: Disciplines of Mastery */}
+                    <div className="space-y-4 pt-4 border-t border-white/10">
+                      <h4 className="text-xs font-mono uppercase text-amber-300 tracking-wider flex items-center gap-2">
+                        <Music className="w-3.5 h-3.5" />
+                        <span>{isFa ? '۵. زمینه‌های تخصصی هنرمند (Disciplines of Mastery)' : '5. Disciplines of Mastery'}</span>
+                      </h4>
+
+                      <div className="space-y-3">
+                        {siteConfig.disciplines.map((item, idx) => (
+                          <div key={item.id} className="p-3.5 rounded-2xl bg-black/50 border border-white/10 grid sm:grid-cols-2 gap-3 items-center">
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-mono text-white/40 uppercase">Discipline #{idx + 1} (English)</span>
+                              <input
+                                type="text"
+                                value={item.nameEn}
+                                onChange={(e) => {
+                                  const updated = [...siteConfig.disciplines];
+                                  updated[idx] = { ...updated[idx], nameEn: e.target.value };
+                                  updateSiteConfig({ disciplines: updated });
+                                }}
+                                className="w-full bg-zinc-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-400"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-mono text-amber-400/60 uppercase">رشته تخصصی #{idx + 1} (فارسی)</span>
+                              <input
+                                type="text"
+                                dir="rtl"
+                                value={item.nameFa}
+                                onChange={(e) => {
+                                  const updated = [...siteConfig.disciplines];
+                                  updated[idx] = { ...updated[idx], nameFa: e.target.value };
+                                  updateSiteConfig({ disciplines: updated });
+                                }}
+                                className="w-full bg-zinc-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none font-fa focus:border-amber-400"
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Section 6: Studio Contacts */}
+                    <div className="space-y-4 pt-4 border-t border-white/10">
+                      <h4 className="text-xs font-mono uppercase text-amber-300 tracking-wider flex items-center gap-2">
+                        <ShoppingBag className="w-3.5 h-3.5" />
+                        <span>{isFa ? '۶. اطلاعات تماس و شبکه‌های رسمی استودیو' : '6. Studio Contacts & Social Networks'}</span>
+                      </h4>
+
+                      <div className="grid sm:grid-cols-3 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-mono text-white/60 uppercase">Email Address</label>
+                          <input
+                            type="email"
+                            value={siteConfig.contactEmail || ''}
+                            onChange={(e) => updateSiteConfig({ contactEmail: e.target.value })}
+                            className="w-full bg-black/60 border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white font-mono outline-none focus:border-amber-400"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-mono text-white/60 uppercase">Phone / Hotline</label>
+                          <input
+                            type="text"
+                            value={siteConfig.contactPhone || ''}
+                            onChange={(e) => updateSiteConfig({ contactPhone: e.target.value })}
+                            className="w-full bg-black/60 border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white font-mono outline-none focus:border-amber-400"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-mono text-white/60 uppercase">WhatsApp (International)</label>
+                          <input
+                            type="text"
+                            value={siteConfig.whatsappNumber || ''}
+                            onChange={(e) => updateSiteConfig({ whatsappNumber: e.target.value })}
+                            className="w-full bg-black/60 border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white font-mono outline-none focus:border-amber-400"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Bottom Save Bar */}
+                    <div className="pt-4 border-t border-white/10 flex items-center justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPreviewDraft({
+                            type: 'siteConfig',
+                            data: siteConfig,
+                          });
+                          setIsPreviewOpen(true);
+                        }}
+                        className="px-8 py-3 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black font-bold rounded-full text-xs uppercase tracking-widest font-mono cursor-pointer transition-all flex items-center gap-2 shadow-xl"
+                      >
+                        <Eye className="w-4 h-4" />
+                        <span>{isFa ? 'پیش‌نمایش و انتشار هویت استودیو' : 'Preview & Publish Studio Content'}</span>
                       </button>
                     </div>
                   </div>
@@ -1697,151 +2404,8 @@ export const AdminModal: React.FC = () => {
               )}
 
               {/* TAB 4: COMMISSION INQUIRIES & MESSAGES */}
-
               {adminTab === 'inquiries' && (
-                <div className="space-y-6">
-                  {/* Status Filter Tabs */}
-                  <div className="flex items-center gap-2 overflow-x-auto pb-2">
-                    {(['all', 'new', 'in_review', 'contacted', 'completed'] as const).map((st) => (
-                      <button
-                        key={st}
-                        onClick={() => setInquiryFilter(st)}
-                        className={`px-4 py-2 rounded-full text-xs font-mono uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
-                          inquiryFilter === st
-                            ? 'bg-white text-black font-bold'
-                            : 'bg-white/5 text-white/60 hover:text-white'
-                        }`}
-                      >
-                        {st === 'all' ? 'All Inquiries' : t.admin[`inquiry${st.charAt(0).toUpperCase() + st.slice(1).replace('_', '')}` as keyof typeof t.admin] || st}
-                        <span className="ml-2 px-1.5 py-0.2 rounded-full bg-white/10 text-[10px]">
-                          {st === 'all' ? inquiries.length : inquiries.filter(i => i.status === st).length}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-
-                  {filteredInquiries.length === 0 ? (
-                    <div className="p-12 text-center text-white/40 font-light border border-dashed border-white/10 rounded-3xl">
-                      {t.admin.noInquiries}
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {filteredInquiries.map((inq) => (
-                        <div
-                          key={inq.id}
-                          className="p-5 sm:p-6 rounded-3xl bg-white/5 border border-white/10 space-y-4 relative overflow-hidden"
-                        >
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-3">
-                            <div>
-                              <span className="text-xs font-mono text-cyan-400">{inq.createdAt}</span>
-                              <h4 className="text-base font-bold text-white mt-0.5">{inq.name}</h4>
-                            </div>
-
-                            <div className="flex items-center gap-3">
-                              <select
-                                value={inq.status}
-                                onChange={(e) => {
-                                  updateInquiryStatus(inq.id, e.target.value as CommissionInquiry['status']);
-                                  showToast(isFa ? 'وضعیت سفارش بروزرسانی شد' : 'Status updated');
-                                }}
-                                className="bg-black/60 border border-white/20 rounded-xl px-3 py-1.5 text-xs text-cyan-300 font-mono outline-none"
-                              >
-                                <option value="new">{t.admin.inquiryNew}</option>
-                                <option value="in_review">{t.admin.inquiryReviewed}</option>
-                                <option value="contacted">{t.admin.inquiryContacted}</option>
-                                <option value="completed">{t.admin.inquiryCompleted}</option>
-                                <option value="archived">{t.admin.inquiryArchived}</option>
-                              </select>
-
-                              <button
-                                onClick={() => {
-                                  if (window.confirm(t.common.confirmDelete)) {
-                                    deleteInquiry(inq.id);
-                                    showToast(t.admin.toastDeleted);
-                                  }
-                                }}
-                                className="p-2 text-white/40 hover:text-rose-400 transition-colors cursor-pointer"
-                                title={t.admin.inquiryDelete}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Contact Info & Interest */}
-                          <div className="grid sm:grid-cols-3 gap-3 text-xs">
-                            <div className="p-3 rounded-2xl bg-black/40 border border-white/5 space-y-1">
-                              <span className="text-white/40 font-mono uppercase text-[10px]">Email</span>
-                              <p className="font-mono text-white/90 truncate">
-                                <a href={`mailto:${inq.email}`} className="hover:text-cyan-400">
-                                  {inq.email}
-                                </a>
-                              </p>
-                            </div>
-                            <div className="p-3 rounded-2xl bg-black/40 border border-white/5 space-y-1">
-                              <span className="text-white/40 font-mono uppercase text-[10px]">Phone</span>
-                              <p className="font-mono text-white/90">
-                                {inq.phone ? (
-                                  <a href={`tel:${inq.phone}`} className="hover:text-cyan-400">
-                                    {inq.phone}
-                                  </a>
-                                ) : 'Not provided'}
-                              </p>
-                            </div>
-                            <div className="p-3 rounded-2xl bg-black/40 border border-white/5 space-y-1">
-                              <span className="text-white/40 font-mono uppercase text-[10px]">Dimensions</span>
-                              <p className="text-white/90">{inq.dimensions || 'Bespoke'}</p>
-                            </div>
-                          </div>
-
-                          {/* Interest Category */}
-                          <div className="space-y-1">
-                            <span className="text-[10px] font-mono text-cyan-400 uppercase tracking-widest">
-                              {t.admin.inquiryInterest}
-                            </span>
-                            <p className="text-sm font-semibold text-white/90">{inq.interest}</p>
-                          </div>
-
-                          {/* Client Message */}
-                          <div className="p-4 rounded-2xl bg-black/60 border border-white/5 space-y-1">
-                            <span className="text-[10px] font-mono text-white/40 uppercase tracking-widest block">
-                              {t.admin.inquiryMessage}
-                            </span>
-                            <p className="text-xs text-white/80 leading-relaxed whitespace-pre-wrap font-light">
-                              {inq.message}
-                            </p>
-                          </div>
-
-                          {/* Studio Internal Notes */}
-                          <div className="space-y-2 pt-2">
-                            <label className="text-[10px] font-mono text-amber-300 uppercase tracking-widest block">
-                              {t.admin.inquiryNotes}
-                            </label>
-                            <div className="flex gap-2">
-                              <input
-                                type="text"
-                                value={selectedInquiryNotes[inq.id] !== undefined ? selectedInquiryNotes[inq.id] : (inq.adminNotes || '')}
-                                onChange={(e) => setSelectedInquiryNotes({ ...selectedInquiryNotes, [inq.id]: e.target.value })}
-                                placeholder="Add notes (e.g. Sent sample pigments, meeting scheduled...)"
-                                className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-xs text-white outline-none focus:border-amber-400"
-                              />
-                              <button
-                                onClick={() => {
-                                  const note = selectedInquiryNotes[inq.id] !== undefined ? selectedInquiryNotes[inq.id] : (inq.adminNotes || '');
-                                  updateInquiryStatus(inq.id, inq.status, note);
-                                  showToast(isFa ? 'یادداشت ذخیره شد' : 'Notes saved');
-                                }}
-                                className="px-4 py-2 bg-amber-400/20 hover:bg-amber-400/30 text-amber-300 border border-amber-400/30 rounded-xl text-xs font-mono cursor-pointer transition-colors"
-                              >
-                                {t.common.save}
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <EmailInquiriesTab showToast={showToast} />
               )}
 
               {/* TAB 5: CONTACT & BANNER SETTINGS */}
@@ -1947,8 +2511,118 @@ export const AdminModal: React.FC = () => {
                       </div>
                     </div>
 
+                    {/* Admin Access Credentials Manager */}
+                    <div className="p-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-black/60 to-black/80 border border-amber-500/30 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-2 rounded-xl bg-amber-400/20 text-amber-300">
+                            <KeyRound className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <h4 className="text-xs sm:text-sm font-bold font-mono text-white uppercase tracking-wider">
+                              {isFa ? 'نام کاربری و رمز عبور مدیریت (Admin Credentials)' : 'Studio Admin Access Credentials'}
+                            </h4>
+                            <p className="text-[11px] text-white/50 font-mono">
+                              {isFa ? 'مدیریت مشخصات امنیتی جهت ورود به کنترل پنل آتلیه' : 'Set custom username & master password for studio access'}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-mono px-2.5 py-1 rounded-full bg-amber-400/10 text-amber-400 border border-amber-400/30">
+                          {isFa ? 'امنیت فعال' : 'Protected'}
+                        </span>
+                      </div>
+
+                      <div className="grid sm:grid-cols-2 gap-4 pt-1">
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-mono text-white/70 uppercase flex items-center justify-between">
+                            <span>{isFa ? 'نام کاربری ادمین (Username)' : 'Admin Username'}</span>
+                            <span className="text-[10px] text-amber-400/70">e.g. saghi</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={adminUsernameInput}
+                            onChange={(e) => setAdminUsernameInput(e.target.value)}
+                            dir="ltr"
+                            placeholder="saghi"
+                            className="w-full bg-black/70 border border-white/15 focus:border-amber-400 rounded-xl px-4 py-2.5 text-xs text-white outline-none font-mono transition-colors"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-mono text-white/70 uppercase flex items-center justify-between">
+                            <span>{isFa ? 'رمز عبور مدیریت (Password)' : 'Master Password'}</span>
+                            <span className="text-[10px] text-amber-400/70">8+ chars</span>
+                          </label>
+                          <div className="relative">
+                            <input
+                              type={showAdminPassword ? 'text' : 'password'}
+                              value={adminPasswordInput}
+                              onChange={(e) => setAdminPasswordInput(e.target.value)}
+                              dir="ltr"
+                              placeholder="Saghi@Art2026"
+                              className="w-full bg-black/70 border border-white/15 focus:border-amber-400 rounded-xl px-4 py-2.5 pr-10 text-xs text-white outline-none font-mono transition-colors"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowAdminPassword(!showAdminPassword)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors cursor-pointer"
+                            >
+                              {showAdminPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2 border-t border-white/10 text-xs font-mono text-white/60">
+                        <span>
+                          {isFa 
+                            ? 'پیش‌فرض: نام کاربری: saghi | رمز عبور: Saghi@Art2026'
+                            : 'Default: Username: saghi | Password: Saghi@Art2026'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!adminUsernameInput.trim()) {
+                              showToast(isFa ? 'نام کاربری نمی‌تواند خالی باشد' : 'Username cannot be empty');
+                              return;
+                            }
+                            if (adminPasswordInput.length < 6) {
+                              showToast(isFa ? 'رمز عبور باید حداقل ۶ کاراکتر باشد' : 'Password must be at least 6 characters');
+                              return;
+                            }
+                            const creds = {
+                              username: adminUsernameInput.trim(),
+                              password: adminPasswordInput,
+                              passwordHash: adminPasswordInput,
+                              email: siteConfig.email || 'contact@saghiabyar.com'
+                            };
+                            updateSiteConfig({ adminCredentials: creds });
+                            await saveAdminCredentialsToFirestore({
+                              username: creds.username,
+                              password: creds.password,
+                              email: creds.email,
+                            });
+                            showToast(isFa ? 'مشخصات ورود ادمین در دیتابیس و حافظه ذخیره شد' : 'Admin credentials saved to database');
+                          }}
+                          className="px-5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5"
+                        >
+                          <Save className="w-3.5 h-3.5" />
+                          <span>{isFa ? 'ذخیره در دیتابیس' : 'Save to Database'}</span>
+                        </button>
+                      </div>
+                    </div>
+
                     <button
-                      onClick={() => showToast(t.admin.toastSaved)}
+                      onClick={() => {
+                        updateSiteConfig({
+                          adminCredentials: {
+                            username: adminUsernameInput.trim() || 'saghi',
+                            passwordHash: adminPasswordInput || 'Saghi@Art2026',
+                            email: siteConfig.email || 'contact@saghiabyar.com'
+                          }
+                        });
+                        showToast(t.admin.toastSaved);
+                      }}
                       className="px-8 py-3 bg-white text-black hover:bg-gray-200 rounded-full font-bold text-xs uppercase tracking-widest font-mono cursor-pointer transition-all flex items-center gap-2"
                     >
                       <Save className="w-4 h-4" />
@@ -2040,6 +2714,14 @@ export const AdminModal: React.FC = () => {
           </div>
         )}
       </motion.div>
+
+      {/* Preview Before Publish Full Modal */}
+      <PublishPreviewModal
+        isOpen={isPreviewOpen}
+        onClose={() => setIsPreviewOpen(false)}
+        onConfirmPublish={handleConfirmPublish}
+        payload={previewDraft}
+      />
     </div>
   );
 };

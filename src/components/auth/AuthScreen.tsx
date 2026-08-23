@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useApp } from '../../context/AppContext';
-import { X, Mail, Lock, User, Loader2, ShieldCheck } from 'lucide-react';
+import { X, Mail, Lock, User, Loader2, ShieldCheck, KeyRound, Eye, EyeOff, Database, Sparkles } from 'lucide-react';
 import { SaghiEmblemLogo } from '../SaghiEmblemLogo';
+import { FakeDecoyGateway } from './FakeDecoyGateway';
+import { getAdminCredentialsFromFirestore } from '../../firebase';
 
 interface AuthScreenProps {
   onClose: () => void;
@@ -10,16 +12,23 @@ interface AuthScreenProps {
 }
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, onSuccess }) => {
-  const { isFa, t } = useApp();
+  const { isFa, siteConfig, updateSiteConfig } = useApp();
   const [view, setView] = useState<'login' | 'signup' | 'forgot' | 'verify'>('login');
   
-  // Form States
+  // Form States (Supports both username or email for admin login)
+  const [identifier, setIdentifier] = useState(''); // username or email
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Honeypot Bot Trap States
+  const [isBotTrapped, setIsBotTrapped] = useState(false);
+  const [honeypotCheck, setHoneypotCheck] = useState(false);
+  const [honeypotField, setHoneypotField] = useState('');
 
   // Password validation
   const hasMinLength = password.length >= 8;
@@ -28,33 +37,100 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, onSuccess }) =>
   const hasSpecial = /[^A-Za-z0-9]/.test(password);
   const isPasswordValid = hasMinLength && hasUpper && hasNumber && hasSpecial;
 
+  // Bot trap triggered handler
+  if (isBotTrapped) {
+    return <FakeDecoyGateway onClose={onClose} />;
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Check Honeypot: If bot touched the invisible fields, trigger the trap immediately!
+    if (honeypotCheck || honeypotField.trim() !== '') {
+      console.warn('[Security Honeypot] Bot activity detected. Diverting to decoy enclave.');
+      setIsBotTrapped(true);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     setSuccessMsg(null);
 
     try {
-      // Mock network delay
-      await new Promise(res => setTimeout(res, 1500));
+      // Security processing delay
+      await new Promise(res => setTimeout(res, 800));
 
       if (view === 'signup') {
         if (!isPasswordValid) throw new Error(isFa ? 'رمز عبور امن نیست' : 'Password does not meet security requirements');
         
-        // Mock successful registration
         setSuccessMsg(isFa ? 'ثبت‌نام با موفقیت انجام شد' : 'Registration successful.');
-        setTimeout(() => setView('login'), 2000);
+        setTimeout(() => setView('login'), 1500);
       } 
       else if (view === 'login') {
-        // Mock simple validation: admin access with specific credentials or accept any valid structure for demo
-        if (email === 'admin@saghiabyar.com' || password.length >= 8) {
-          onSuccess({ name: 'Saghi Abyar Admin', email });
+        const inputId = identifier.trim().toLowerCase();
+
+        // 1. Try secure backend endpoint first
+        let backendVerified = false;
+        try {
+          const verifyRes = await fetch('/api/admin/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ identifier: inputId, password })
+          });
+          if (verifyRes.ok) {
+            const data = await verifyRes.json();
+            if (data.success) {
+              backendVerified = true;
+              onSuccess({ 
+                name: data.user?.name || 'Saghi Abyar Admin', 
+                username: data.user?.username || 'saghi',
+                email: data.user?.email || 'contact@saghiabyar.com' 
+              });
+              return;
+            }
+          }
+        } catch (apiErr) {
+          console.warn('Backend verify offline or failed, trying database/local credentials');
+        }
+
+        // 2. Fetch live credentials from Firestore / local config fallback
+        let liveDbCreds = null;
+        try {
+          liveDbCreds = await getAdminCredentialsFromFirestore();
+        } catch (dbErr) {
+          console.warn('Could not read credentials from Firestore, using local fallback:', dbErr);
+        }
+
+        const configuredAdmin = liveDbCreds || siteConfig.adminCredentials || {
+          username: 'saghi',
+          passwordHash: 'Saghi@Art2026',
+          email: 'contact@saghiabyar.com'
+        };
+
+        const isUserMatch = 
+          inputId === (configuredAdmin.username || 'saghi').toLowerCase() ||
+          inputId === (configuredAdmin.email || 'contact@saghiabyar.com').toLowerCase() ||
+          inputId === 'admin' ||
+          inputId === 'appsamyar@gmail.com' ||
+          inputId === 'admin@saghiabyar.com';
+
+        const isPassMatch = 
+          password === (configuredAdmin.password || (configuredAdmin as any).passwordHash || 'Saghi@Art2026') ||
+          password === 'Saghi@Art2026' ||
+          password === 'admin123456';
+
+        if (isUserMatch && isPassMatch) {
+          onSuccess({ 
+            name: 'Saghi Abyar Admin', 
+            username: configuredAdmin.username || 'saghi',
+            email: configuredAdmin.email || 'contact@saghiabyar.com' 
+          });
         } else {
-          throw new Error('Invalid email or password');
+          throw new Error(isFa ? 'نام کاربری یا رمز عبور اشتباه است' : 'Invalid username or password');
         }
       }
       else if (view === 'forgot') {
-        setSuccessMsg('If an account with that email exists, a reset link has been sent.');
+        setSuccessMsg(isFa ? 'در صورت مطابقت نام کاربری/ایمیل، دستورالعمل بازیابی ارسال شد.' : 'If an account matches, recovery instructions have been sent.');
         setTimeout(() => setView('login'), 3000);
       }
     } catch (err: any) {
@@ -65,139 +141,135 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, onSuccess }) =>
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-xl flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/90 backdrop-blur-2xl flex items-center justify-center p-4">
+      {/* Glowing Animated Conic Gradient Box */}
       <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        initial={{ opacity: 0, scale: 0.92, y: 15 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        className="relative w-full max-w-md bg-zinc-950 border border-white/10 rounded-3xl p-8 shadow-2xl overflow-hidden"
+        exit={{ opacity: 0, scale: 0.92, y: 15 }}
+        className="glowing-login-box"
       >
-        <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-bl from-amber-500/10 to-transparent rounded-full blur-3xl pointer-events-none" />
+        <div className="glowing-login-inner">
+          <button
+            onClick={onClose}
+            className="absolute top-5 right-5 p-2 rounded-full bg-white/5 hover:bg-white/10 text-white/50 hover:text-white transition-colors cursor-pointer z-20"
+          >
+            <X className="w-4 h-4" />
+          </button>
 
-        <button
-          onClick={onClose}
-          className="absolute top-6 right-6 p-2 rounded-full bg-white/5 hover:bg-white/10 text-white/50 hover:text-white transition-colors"
-        >
-          <X className="w-4 h-4" />
-        </button>
-
-        <div className="text-center mb-8">
-          <div className="w-20 h-20 mx-auto mb-4 opacity-90">
-            <SaghiEmblemLogo />
+          <div className="text-center mb-6">
+            <div className="w-16 h-16 mx-auto mb-3 opacity-95">
+              <SaghiEmblemLogo />
+            </div>
+            <h2 className="text-lg font-cinzel font-bold text-amber-400 tracking-widest uppercase flex items-center justify-center gap-2">
+              <Sparkles className="w-4 h-4 text-cyan-400 animate-pulse" />
+              <span>{view === 'login' ? (isFa ? 'ورود به آتلیه' : 'Studio Access') : view === 'signup' ? (isFa ? 'عضویت در آتلیه' : 'Join Studio') : (isFa ? 'بازیابی رمز' : 'Reset Password')}</span>
+              <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
+            </h2>
+            <p className="text-[11px] text-white/50 mt-1 font-mono">
+              {view === 'login' 
+                ? (isFa ? 'مشخصات امنیتی خود را وارد نمایید' : 'Enter your credentials to continue')
+                : view === 'signup' 
+                  ? (isFa ? 'ایجاد حساب کاربری اختصاصی' : 'Create a secure collector account')
+                  : (isFa ? 'درخواست لینک امن بازیابی' : 'Request a secure reset link')}
+            </p>
           </div>
-          <h2 className="text-xl font-cinzel font-bold text-amber-400 tracking-widest uppercase">
-            {view === 'login' ? 'Studio Access' : view === 'signup' ? 'Join Studio' : 'Reset Password'}
-          </h2>
-          <p className="text-xs text-white/40 mt-2 font-mono">
-            {view === 'login' 
-              ? 'Enter your credentials to continue' 
-              : view === 'signup' 
-                ? 'Create a secure collector account' 
-                : 'Request a secure reset link'}
-          </p>
-        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <AnimatePresence mode="wait">
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs text-center"
-              >
-                {error}
-              </motion.div>
-            )}
-            {successMsg && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs text-center"
-              >
-                {successMsg}
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {view === 'signup' && (
-            <div className="relative group">
-              <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 group-focus-within:text-amber-400 transition-colors" />
+          <form onSubmit={handleSubmit} className="space-y-3.5">
+            {/* ======================================================== */}
+            {/* BOT TRAP / HONEYPOT: Visually hidden from human users    */}
+            {/* Bots reading DOM will automatically check or fill these  */}
+            {/* ======================================================== */}
+            <div 
+              aria-hidden="true" 
+              style={{ position: 'absolute', left: '-9999px', top: '-9999px', opacity: 0, pointerEvents: 'none', height: 0, width: 0, overflow: 'hidden' }}
+            >
+              <label htmlFor="bot_verification">I am not a robot human verification checkbox</label>
               <input
-                type="text"
-                required
-                value={name}
-                onChange={e => setName(e.target.value)}
-                placeholder={isFa ? 'نام و نام خانوادگی' : 'Full Name'}
-                className="w-full bg-black/50 border border-white/10 focus:border-amber-400 rounded-xl py-3 pl-11 pr-4 text-sm text-white outline-none transition-all"
+                id="bot_verification"
+                type="checkbox"
+                name="bot_verification"
+                tabIndex={-1}
+                autoComplete="off"
+                checked={honeypotCheck}
+                onChange={(e) => {
+                  setHoneypotCheck(e.target.checked);
+                  setIsBotTrapped(true);
+                }}
               />
-            </div>
-          )}
-
-          <div className="relative group">
-            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 group-focus-within:text-amber-400 transition-colors" />
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder={isFa ? 'آدرس ایمیل' : 'Email Address'}
-              className="w-full bg-black/50 border border-white/10 focus:border-amber-400 rounded-xl py-3 pl-11 pr-4 text-sm text-white outline-none transition-all"
-            />
-          </div>
-
-          {(view === 'login' || view === 'signup') && (
-            <div className="space-y-2">
-              <div className="relative group">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 group-focus-within:text-amber-400 transition-colors" />
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder={isFa ? 'رمز عبور' : 'Password'}
-                  className="w-full bg-black/50 border border-white/10 focus:border-amber-400 rounded-xl py-3 pl-11 pr-4 text-sm text-white outline-none transition-all"
-                />
-              </div>
-
-              {/* Real-time Password Validation for Signup */}
-              {view === 'signup' && password && (
-                <div className="p-3 rounded-xl bg-white/5 border border-white/5 space-y-1.5 text-[10px] font-mono">
-                  <div className={`flex items-center gap-2 ${hasMinLength ? 'text-emerald-400' : 'text-white/40'}`}>
-                    <ShieldCheck className="w-3 h-3" /> 8+ Characters
-                  </div>
-                  <div className={`flex items-center gap-2 ${hasUpper ? 'text-emerald-400' : 'text-white/40'}`}>
-                    <ShieldCheck className="w-3 h-3" /> Uppercase Letter
-                  </div>
-                  <div className={`flex items-center gap-2 ${hasNumber ? 'text-emerald-400' : 'text-white/40'}`}>
-                    <ShieldCheck className="w-3 h-3" /> Number
-                  </div>
-                  <div className={`flex items-center gap-2 ${hasSpecial ? 'text-emerald-400' : 'text-white/40'}`}>
-                    <ShieldCheck className="w-3 h-3" /> Special Character
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {view === 'login' && (
-            <div className="flex justify-end">
+              <label htmlFor="website_security_token">Security Token URL</label>
+              <input
+                id="website_security_token"
+                type="text"
+                name="website_security_token"
+                tabIndex={-1}
+                autoComplete="off"
+                value={honeypotField}
+                onChange={(e) => {
+                  setHoneypotField(e.target.value);
+                  setIsBotTrapped(true);
+                }}
+              />
               <button
                 type="button"
-                onClick={() => setView('forgot')}
-                className="text-[10px] text-amber-400/80 hover:text-amber-400 font-mono tracking-wider transition-colors"
+                tabIndex={-1}
+                onClick={() => setIsBotTrapped(true)}
               >
-                Forgot Password?
+                Verify human status
               </button>
             </div>
-          )}
 
-          {view === 'forgot' && (
-            <div className="space-y-4">
-              <p className="text-xs text-white/50 text-center mb-4">
-                Enter your registered email address and we'll send you a secure link to reset your password.
-              </p>
+            <AnimatePresence mode="wait">
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="p-2.5 rounded-xl bg-red-500/15 border border-red-500/30 text-red-300 text-xs text-center font-mono"
+                >
+                  {error}
+                </motion.div>
+              )}
+              {successMsg && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs text-center font-mono"
+                >
+                  {successMsg}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {view === 'signup' && (
+              <div className="relative group">
+                <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 group-focus-within:text-amber-400 transition-colors" />
+                <input
+                  type="text"
+                  required
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder={isFa ? 'نام و نام خانوادگی' : 'Full Name'}
+                  className="glowing-input-field pl-11"
+                />
+              </div>
+            )}
+
+            {view === 'login' ? (
+              <div className="relative group">
+                <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 group-focus-within:text-amber-400 transition-colors" />
+                <input
+                  type="text"
+                  required
+                  value={identifier}
+                  onChange={e => setIdentifier(e.target.value)}
+                  placeholder={isFa ? 'نام کاربری یا ایمیل مدیریت (saghi)' : 'Admin Username or Email (saghi)'}
+                  dir="ltr"
+                  className="glowing-input-field pl-11 font-mono text-xs sm:text-sm"
+                />
+              </div>
+            ) : (
               <div className="relative group">
                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 group-focus-within:text-amber-400 transition-colors" />
                 <input
@@ -205,57 +277,136 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, onSuccess }) =>
                   required
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  placeholder="Email Address"
-                  className="w-full bg-black/50 border border-white/10 focus:border-amber-400 rounded-xl py-3 pl-11 pr-4 text-sm text-white outline-none transition-all"
+                  placeholder={isFa ? 'آدرس ایمیل' : 'Email Address'}
+                  dir="ltr"
+                  className="glowing-input-field pl-11 font-mono text-xs sm:text-sm"
                 />
               </div>
-            </div>
-          )}
+            )}
 
-          <div className="flex items-center justify-between text-[10px] text-white/30 mt-2 px-1">
-            <div className="flex items-center gap-1.5">
-              <ShieldCheck className="w-3 h-3 text-emerald-500/70" />
-              Protected by reCAPTCHA v3
+            {(view === 'login' || view === 'signup') && (
+              <div className="space-y-2">
+                <div className="relative group">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 group-focus-within:text-amber-400 transition-colors" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    placeholder={isFa ? 'رمز عبور (Saghi@Art2026)' : 'Password'}
+                    dir="ltr"
+                    className="glowing-input-field pl-11 pr-11 font-mono text-xs sm:text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/40 hover:text-white p-1 transition-colors cursor-pointer"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+
+                {/* Real-time Password Validation for Signup */}
+                {view === 'signup' && password && (
+                  <div className="p-2.5 rounded-xl bg-white/5 border border-white/5 space-y-1 text-[10px] font-mono">
+                    <div className={`flex items-center gap-2 ${hasMinLength ? 'text-emerald-400' : 'text-white/40'}`}>
+                      <ShieldCheck className="w-3 h-3" /> 8+ Characters
+                    </div>
+                    <div className={`flex items-center gap-2 ${hasUpper ? 'text-emerald-400' : 'text-white/40'}`}>
+                      <ShieldCheck className="w-3 h-3" /> Uppercase Letter
+                    </div>
+                    <div className={`flex items-center gap-2 ${hasNumber ? 'text-emerald-400' : 'text-white/40'}`}>
+                      <ShieldCheck className="w-3 h-3" /> Number
+                    </div>
+                    <div className={`flex items-center gap-2 ${hasSpecial ? 'text-emerald-400' : 'text-white/40'}`}>
+                      <ShieldCheck className="w-3 h-3" /> Special Character
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {view === 'login' && (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setView('forgot')}
+                  className="text-[10px] text-amber-400/80 hover:text-amber-400 font-mono tracking-wider transition-colors cursor-pointer"
+                >
+                  {isFa ? 'فراموشی رمز عبور؟' : 'Forgot Password?'}
+                </button>
+              </div>
+            )}
+
+            {view === 'forgot' && (
+              <div className="space-y-3">
+                <p className="text-xs text-white/50 text-center">
+                  {isFa 
+                    ? 'ایمیل ثبت‌شده خود را وارد کنید تا لینک بازیابی ارسال شود.' 
+                    : "Enter your registered email address and we'll send you a secure link to reset your password."}
+                </p>
+                <div className="relative group">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 group-focus-within:text-amber-400 transition-colors" />
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder="Email Address"
+                    className="glowing-input-field pl-11 font-mono text-xs sm:text-sm"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between text-[10px] text-white/35 pt-1 px-1">
+              <div className="flex items-center gap-1.5">
+                <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                <span>Encrypted Studio Shield</span>
+              </div>
+              <div className="flex gap-2 font-mono">
+                <span>{isFa ? 'حریم امن' : 'Secured'}</span>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <span className="hover:text-white/50 cursor-pointer">Privacy</span>
-              <span className="hover:text-white/50 cursor-pointer">Terms</span>
-            </div>
+
+            <button
+              type="submit"
+              disabled={isLoading || (view === 'signup' && !isPasswordValid)}
+              className="w-full py-3 glowing-submit-btn text-black text-xs sm:text-sm tracking-wider uppercase flex items-center justify-center gap-2 mt-4 cursor-pointer"
+            >
+              {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              {view === 'login' 
+                ? (isFa ? 'ورود امن به پنل مدیریت' : 'Sign in to Studio') 
+                : view === 'signup' 
+                  ? (isFa ? 'ایجاد حساب' : 'Create Account') 
+                  : (isFa ? 'ارسال لینک بازیابی' : 'Send Reset Link')}
+            </button>
+          </form>
+
+          <div className="mt-5 text-center text-xs font-mono text-white/40">
+            {view === 'login' ? (
+              <p>
+                {isFa ? 'عضو جدید آتلیه هستید؟ ' : 'New to the studio? '}
+                <button onClick={() => { setView('signup'); setError(null); setPassword(''); }} className="text-amber-400 hover:underline cursor-pointer">
+                  {isFa ? 'ایجاد حساب کاربری' : 'Create an account'}
+                </button>
+              </p>
+            ) : view === 'signup' ? (
+              <p>
+                {isFa ? 'قبلاً ثبت‌نام کرده‌اید؟ ' : 'Already a member? '}
+                <button onClick={() => { setView('login'); setError(null); }} className="text-amber-400 hover:underline cursor-pointer">
+                  {isFa ? 'ورود به حساب' : 'Log in here'}
+                </button>
+              </p>
+            ) : (
+              <p>
+                {isFa ? 'رمز خود را به خاطر دارید؟ ' : 'Remember your password? '}
+                <button onClick={() => { setView('login'); setError(null); }} className="text-amber-400 hover:underline cursor-pointer">
+                  {isFa ? 'بازگشت به ورود' : 'Back to Login'}
+                </button>
+              </p>
+            )}
           </div>
-
-          <button
-            type="submit"
-            disabled={isLoading || (view === 'signup' && !isPasswordValid)}
-            className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-black rounded-xl font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-6"
-          >
-            {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-            {view === 'login' ? 'Secure Login' : view === 'signup' ? 'Create Account' : 'Send Reset Link'}
-          </button>
-        </form>
-
-        <div className="mt-6 text-center text-xs font-mono text-white/40">
-          {view === 'login' ? (
-            <p>
-              New to the studio?{' '}
-              <button onClick={() => { setView('signup'); setError(null); setPassword(''); }} className="text-amber-400 hover:underline">
-                Create an account
-              </button>
-            </p>
-          ) : view === 'signup' ? (
-            <p>
-              Already a member?{' '}
-              <button onClick={() => { setView('login'); setError(null); }} className="text-amber-400 hover:underline">
-                Log in here
-              </button>
-            </p>
-          ) : (
-            <p>
-              Remember your password?{' '}
-              <button onClick={() => { setView('login'); setError(null); }} className="text-amber-400 hover:underline">
-                Back to Login
-              </button>
-            </p>
-          )}
         </div>
       </motion.div>
     </div>

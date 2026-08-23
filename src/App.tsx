@@ -13,6 +13,7 @@ import { PurchaseInquiryModal } from './components/PurchaseInquiryModal';
 import { AdminModal } from './components/admin/AdminModal';
 import { AmbientOilCanvas } from './components/AmbientOilCanvas';
 import { SplashScreen } from './components/SplashScreen';
+import { FloatingWhatsAppButton } from './components/FloatingWhatsAppButton';
 
 function MainApp() {
   const { isAdminOpen, setIsAdminOpen, isFa } = useApp();
@@ -139,6 +140,9 @@ function MainApp() {
         isOpen={isAdminOpen}
         onClose={() => setIsAdminOpen(false)}
       />
+
+      {/* Floating Direct WhatsApp Button */}
+      <FloatingWhatsAppButton />
 
       {/* Global Footer */}
       <Footer

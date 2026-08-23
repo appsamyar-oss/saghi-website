@@ -17,28 +17,43 @@ export type MediaType = 'image' | 'audio' | 'video';
 
 export interface Artwork {
   id: string;
+  // Dual language text
   title: string;
+  titleEn?: string;
   titleFa?: string;
   subtitle?: string;
+  subtitleEn?: string;
   subtitleFa?: string;
   description: string;
+  descriptionEn?: string;
   descriptionFa?: string;
   category: string;
+  categoryEn?: string;
+  categoryFa?: string;
   medium: string;
+  mediumEn?: string;
   mediumFa?: string;
   year: string;
   dimensions?: string;
+  dimensionsEn?: string;
+  dimensionsFa?: string;
   artist: string;
+  artistEn?: string;
   artistFa?: string;
   tags: string[];
+  tagsFa?: string[];
   imageUrl: string;
   aspectRatio?: 'landscape' | 'portrait' | 'square';
   featured?: boolean;
   provenance?: string;
+  provenanceEn?: string;
   provenanceFa?: string;
   culturalOrigin?: string;
+  culturalOriginEn?: string;
   culturalOriginFa?: string;
   price?: string;
+  priceEn?: string;
+  priceFa?: string;
   status?: 'available' | 'reserved' | 'archive' | 'commissioned';
   
   // Media extension for Tar Music & Performance Clips
@@ -47,16 +62,43 @@ export interface Artwork {
   videoUrl?: string;
   duration?: string;
   dastgah?: string;
+  dastgahEn?: string;
   dastgahFa?: string;
   instrument?: string;
+  instrumentEn?: string;
   instrumentFa?: string;
   performanceType?: string;
+  performanceTypeEn?: string;
   performanceTypeFa?: string;
   waveformSeed?: number[];
   
   // Purchase & Commission features
   canPurchase?: boolean;
   canCommission?: boolean;
+}
+
+export interface ThreadMessage {
+  id: string;
+  senderType: 'user' | 'admin';
+  senderName: string;
+  senderEmail: string;
+  recipientEmail?: string;
+  subject?: string;
+  message: string;
+  html?: string;
+  createdAt: string;
+  status?: 'sent' | 'received' | 'simulated' | 'failed';
+  tags?: string[];
+  emailId?: string;
+  inReplyTo?: string;
+  attachments?: Array<{ name: string; url?: string; size?: number; type?: string }>;
+}
+
+export interface CustomTag {
+  id: string;
+  labelEn: string;
+  labelFa: string;
+  color: 'rose' | 'amber' | 'emerald' | 'cyan' | 'purple' | 'blue' | 'zinc';
 }
 
 export interface CommissionInquiry {
@@ -71,8 +113,16 @@ export interface CommissionInquiry {
   dimensions?: string;
   message: string;
   createdAt: string;
-  status: 'new' | 'reviewed' | 'contacted' | 'completed' | 'archived';
+  status: 'new' | 'in_review' | 'contacted' | 'completed' | 'archived';
+  tags?: string[];
+  messages?: ThreadMessage[];
   adminNotes?: string;
+  repliedAt?: string;
+  replySubject?: string;
+  replyMessage?: string;
+  emailDeliveryStatus?: 'sent' | 'simulated' | 'failed';
+  userEmailSent?: boolean;
+  adminEmailSent?: boolean;
 }
 
 export interface DisciplineItem {
@@ -171,6 +221,11 @@ export interface SiteConfig {
   stories: SiteStory[];
   backgroundSettings?: BackgroundSettings;
   backgroundPrompts?: BackgroundPrompt[];
+  adminCredentials?: {
+    username: string;
+    passwordHash: string; // or password
+    email?: string;
+  };
 }
 
 export interface CommissionForm {

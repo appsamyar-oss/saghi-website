@@ -11,8 +11,8 @@
         "category": { "type": "string" },
         "imageUrl": { "type": "string" },
         "artist": { "type": "string" },
-        "createdAt": { "type": "number" },
-        "updatedAt": { "type": "number" }
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
       },
       "required": ["title", "description", "category", "imageUrl", "artist", "createdAt"]
     },
@@ -36,17 +36,42 @@
         "atelierNameFa": { "type": "string" }
       }
     },
+    "AdminAuth": {
+      "title": "Admin Authentication Credentials",
+      "description": "Custom atelier administrative authentication credentials",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string", "maxLength": 100 },
+        "password": { "type": "string", "maxLength": 200 },
+        "email": { "type": "string", "maxLength": 150 },
+        "updatedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["username", "password"]
+    },
     "Inquiry": {
       "title": "Commission Inquiry",
-      "description": "User inquiries",
+      "description": "User inquiries and bidirectional email conversation threads",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "name": { "type": "string" },
-        "email": { "type": "string" },
-        "message": { "type": "string" },
-        "status": { "type": "string" },
-        "createdAt": { "type": "number" }
+        "name": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 100 },
+        "phone": { "type": "string", "maxLength": 50 },
+        "inquiryType": { "type": "string", "maxLength": 50 },
+        "artworkId": { "type": "string", "maxLength": 100 },
+        "artworkTitle": { "type": "string", "maxLength": 200 },
+        "interest": { "type": "string", "maxLength": 300 },
+        "dimensions": { "type": "string", "maxLength": 100 },
+        "message": { "type": "string", "maxLength": 5000 },
+        "status": { "type": "string", "maxLength": 50 },
+        "tags": { "type": "array" },
+        "messages": { "type": "array" },
+        "adminNotes": { "type": "string", "maxLength": 2000 },
+        "repliedAt": { "type": "string" },
+        "replySubject": { "type": "string", "maxLength": 300 },
+        "replyMessage": { "type": "string", "maxLength": 5000 },
+        "emailDeliveryStatus": { "type": "string" },
+        "createdAt": { "type": "string" }
       },
       "required": ["name", "email", "message", "status", "createdAt"]
     }
@@ -62,7 +87,7 @@
     },
     "/config/{configId}": {
       "schema": { "$ref": "#/entities/Config" },
-      "description": "Global config"
+      "description": "Global config and admin credentials"
     },
     "/inquiries/{inquiryId}": {
       "schema": { "$ref": "#/entities/Inquiry" },

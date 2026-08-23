@@ -145,15 +145,28 @@ export const ContactPage: React.FC = () => {
                 transition={{ delay: 0.5 }}
                 className="flex items-start gap-4 p-5 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm"
               >
-                <div className="p-3 rounded-xl bg-white/5 border border-white/10 text-emerald-400 flex-shrink-0">
-                  <Phone className="w-5 h-5" />
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex-shrink-0">
+                  <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                    <path d="M17.472 14.382c-.301-.15-1.78-.878-2.056-.979-.276-.1-.477-.15-.678.15-.201.3-.778.979-.954 1.18-.176.2-.352.226-.653.075-.3-.15-1.267-.467-2.414-1.49-1.048-.934-1.756-2.087-1.962-2.44-.206-.352-.022-.543.129-.693.136-.135.301-.352.452-.528.15-.176.201-.301.301-.502.1-.2.05-.377-.025-.528-.075-.15-.678-1.633-.929-2.235-.245-.586-.494-.506-.678-.515-.176-.009-.377-.009-.578-.009s-.527.075-.803.377c-.276.301-1.054 1.03-1.054 2.512 0 1.482 1.079 2.913 1.23 3.114.15.201 2.124 3.243 5.145 4.548.719.311 1.28.497 1.718.636.722.23 1.378.197 1.9.12.58-.087 1.78-.728 2.03-1.431.251-.703.251-1.306.176-1.431-.076-.126-.277-.201-.578-.352z"/>
+                    <path d="M12.004 2c-5.518 0-9.996 4.48-9.996 10 0 1.765.459 3.488 1.332 5.006L2 22l5.132-1.312c1.472.803 3.128 1.226 4.872 1.226 5.518 0 9.996-4.48 9.996-10S17.522 2 12.004 2zm0 18.176c-1.503 0-2.977-.406-4.262-1.173l-.306-.182-3.167.81.846-3.088-.199-.317a8.163 8.163 0 0 1-1.252-4.226c0-4.509 3.667-8.176 8.176-8.176 4.509 0 8.176 3.667 8.176 8.176 0 4.509-3.667 8.176-8.176 8.176z"/>
+                  </svg>
                 </div>
                 <div>
                   <h3 className={`text-sm font-bold text-white uppercase tracking-wider font-mono ${isFa ? 'font-vazir' : ''}`}>
-                    {t.contact.phoneTitle}
+                    {isFa ? 'واتساپ و گفتگوی مستقیم' : 'WhatsApp Direct Chat'}
                   </h3>
-                  <p dir="ltr" className="text-white/80 font-mono text-sm mt-0.5 text-left">{siteConfig.phone}</p>
-                  <p className={`text-xs text-white/50 ${isFa ? 'font-vazir' : ''}`}>{t.contact.phoneHours}</p>
+                  <a
+                    href="https://wa.me/989190059314"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    dir="ltr"
+                    className="text-emerald-400 hover:text-emerald-300 font-mono text-sm mt-0.5 block text-left transition-colors"
+                  >
+                    +98 919 0059314
+                  </a>
+                  <p className={`text-xs text-white/50 ${isFa ? 'font-vazir' : ''}`}>
+                    {isFa ? 'پاسخگویی سریع جهت سفارش و استعلام آثار' : 'Instant response for inquiries & acquisitions'}
+                  </p>
                 </div>
               </motion.div>
             </div>
