@@ -241,23 +241,74 @@ export const InfiniteGallery3D: React.FC<InfiniteGallery3DProps> = ({
       stateRef.current.snapTimer = setTimeout(snapToNearest, CONFIG.snapDelay);
     };
 
-    // Touch & Mouse Dragging Events
+    // Touch & Mouse Dragging Events with Mobile Tap Detection
     let touchStartX = 0;
+    let touchStartY = 0;
+    let touchStartTime = 0;
+    let hasMoved = false;
+
     const handleTouchStart = (e: TouchEvent) => {
+      if ((e.target as HTMLElement).closest('.ui-interactive')) return;
       touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+      touchStartTime = Date.now();
+      hasMoved = false;
       stateRef.current.isMoving = true;
       if (stateRef.current.snapTimer) clearTimeout(stateRef.current.snapTimer);
     };
 
     const handleTouchMove = (e: TouchEvent) => {
-      const diff = touchStartX - e.touches[0].clientX;
-      stateRef.current.targetScroll += diff * 0.35;
-      touchStartX = e.touches[0].clientX;
+      if ((e.target as HTMLElement).closest('.ui-interactive')) return;
+      const currentX = e.touches[0].clientX;
+      const currentY = e.touches[0].clientY;
+      const diffX = touchStartX - currentX;
+      const diffY = touchStartY - currentY;
+
+      // If predominantly horizontal swipe, lock gallery movement
+      if (Math.abs(diffX) > 8 || Math.abs(diffY) > 8) {
+        hasMoved = true;
+      }
+
+      stateRef.current.targetScroll += diffX * 0.35;
+      touchStartX = currentX;
+      touchStartY = currentY;
       stateRef.current.isMoving = true;
       if (stateRef.current.snapTimer) clearTimeout(stateRef.current.snapTimer);
     };
 
-    const handleTouchEnd = () => {
+    const handleTouchEnd = (e: TouchEvent) => {
+      const touchDuration = Date.now() - touchStartTime;
+
+      // Detect clean mobile tap on canvas
+      if (!hasMoved && touchDuration < 300 && e.changedTouches.length > 0) {
+        const touch = e.changedTouches[0];
+        const rect = container.getBoundingClientRect();
+        const clientX = touch.clientX - rect.left;
+        const clientY = touch.clientY - rect.top;
+
+        const touchMouse = new THREE.Vector2(
+          (clientX / width) * 2 - 1,
+          -(clientY / height) * 2 + 1
+        );
+
+        raycaster.setFromCamera(touchMouse, camera);
+        const intersects = raycaster.intersectObjects(stateRef.current.meshes);
+
+        if (intersects.length > 0) {
+          const hitMesh = intersects[0].object as THREE.Mesh;
+          const hitIdx = hitMesh.userData.index;
+          const currentRawIndex = Math.round(stateRef.current.targetScroll / CONFIG.spacingX);
+          const currentSafeIndex = ((currentRawIndex % CONFIG.slideCount) + CONFIG.slideCount) % CONFIG.slideCount;
+
+          if (hitIdx === currentSafeIndex) {
+            onSelectArtwork(items[hitIdx]);
+          } else {
+            stateRef.current.targetScroll = hitIdx * CONFIG.spacingX;
+          }
+          return;
+        }
+      }
+
       snapToNearest();
     };
 

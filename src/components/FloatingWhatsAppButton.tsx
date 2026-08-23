@@ -20,6 +20,11 @@ export const FloatingWhatsAppButton: React.FC = () => {
   return (
     <div 
       className={`fixed bottom-6 ${isFa ? 'left-6' : 'right-6'} z-40 flex items-center gap-3 select-none`}
+      style={{
+        bottom: 'max(1.5rem, calc(env(safe-area-inset-bottom, 0px) + 1rem))',
+        left: isFa ? 'max(1.5rem, env(safe-area-inset-left, 0px))' : undefined,
+        right: !isFa ? 'max(1.5rem, env(safe-area-inset-right, 0px))' : undefined,
+      }}
       dir={isFa ? 'rtl' : 'ltr'}
     >
       {/* Interactive Tooltip Card */}

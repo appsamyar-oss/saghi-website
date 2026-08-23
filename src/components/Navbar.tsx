@@ -96,7 +96,12 @@ export const Navbar: React.FC<NavbarProps> = ({
   ];
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-40 bg-black/85 backdrop-blur-xl border-b border-white/10">
+    <header 
+      className="fixed top-0 left-0 right-0 z-40 bg-black/85 backdrop-blur-xl border-b border-white/10"
+      style={{
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+      }}
+    >
       {/* Announcement Banner */}
       {siteConfig.announcement?.enabled && (
         <div className="bg-gradient-to-r from-amber-950/60 via-zinc-950/80 to-black border-b border-white/5 py-1.5 px-4 text-center">

@@ -268,6 +268,9 @@ export const PhotoDetailModal: React.FC<PhotoDetailModalProps> = ({
                   <div className="w-full h-full aspect-video bg-black flex items-center justify-center">
                     <video
                       controls
+                      playsInline
+                      webkit-playsinline="true"
+                      preload="metadata"
                       controlsList="nodownload"
                       disablePictureInPicture
                       onContextMenu={(e) => e.preventDefault()}

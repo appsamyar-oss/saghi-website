@@ -169,6 +169,9 @@ export const AboutPage: React.FC<AboutPageProps> = ({ setActiveView }) => {
                 src={aboutVideoUrl}
                 poster={artistPortraitUrl}
                 controls
+                playsInline
+                webkit-playsinline="true"
+                preload="metadata"
                 controlsList="nodownload"
                 disablePictureInPicture
                 onContextMenu={(e) => e.preventDefault()}
