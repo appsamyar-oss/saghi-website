@@ -83,7 +83,10 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+const APP_RELEASE_VERSION = 'saghi_atelier_v2026_08_24_update';
+
 const STORAGE_KEYS = {
+  VERSION: 'saghi_atelier_app_version',
   LANG: 'saghi_atelier_lang',
   ARTWORKS: 'saghi_atelier_artworks',
   CATEGORIES: 'saghi_atelier_categories',
@@ -91,6 +94,19 @@ const STORAGE_KEYS = {
   INQUIRIES: 'saghi_atelier_inquiries',
   AUTH: 'saghi_atelier_auth',
 };
+
+// Automatic Cache Busting: If new version is released, refresh stale stored artworks and config
+try {
+  const currentVersion = localStorage.getItem(STORAGE_KEYS.VERSION);
+  if (currentVersion !== APP_RELEASE_VERSION) {
+    localStorage.removeItem(STORAGE_KEYS.ARTWORKS);
+    localStorage.removeItem(STORAGE_KEYS.CATEGORIES);
+    localStorage.removeItem(STORAGE_KEYS.CONFIG);
+    localStorage.setItem(STORAGE_KEYS.VERSION, APP_RELEASE_VERSION);
+  }
+} catch (e) {
+  // Ignore in SSR/restricted environments
+}
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   // 1. Language State

@@ -44,6 +44,17 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
 
     video.muted = true;
     (video as any).defaultMuted = true;
+    video.playsInline = true;
+    video.autoplay = true;
+    video.loop = true;
+
+    // Explicitly set DOM attributes for strict iOS Safari / WebKit policy
+    video.setAttribute('playsinline', '');
+    video.setAttribute('webkit-playsinline', '');
+    video.setAttribute('x5-playsinline', '');
+    video.setAttribute('muted', '');
+    video.setAttribute('autoplay', '');
+    video.setAttribute('loop', '');
 
     const playPromise = video.play();
     if (playPromise !== undefined) {
@@ -57,7 +68,7 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
         });
     }
 
-    // Safety fallback: If video stalls or fails to end within 9 seconds, auto transition
+    // Safety fallback: If video stalls or user wants to proceed, auto transition after duration
     fallbackTimerRef.current = setTimeout(() => {
       handleSkip();
     }, 9000);
@@ -71,6 +82,8 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
     setNeedsUserTap(false);
     if (videoRef.current) {
       videoRef.current.muted = true;
+      videoRef.current.playsInline = true;
+      videoRef.current.loop = true;
       videoRef.current.play().catch(() => {
         handleSkip();
       });
@@ -94,6 +107,7 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
         autoPlay
         muted
         playsInline
+        loop
         webkit-playsinline="true"
         x5-playsinline="true"
         preload="auto"

@@ -270,6 +270,7 @@ export const PhotoDetailModal: React.FC<PhotoDetailModalProps> = ({
                       controls
                       playsInline
                       webkit-playsinline="true"
+                      x5-playsinline="true"
                       preload="metadata"
                       controlsList="nodownload"
                       disablePictureInPicture

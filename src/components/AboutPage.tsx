@@ -171,6 +171,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({ setActiveView }) => {
                 controls
                 playsInline
                 webkit-playsinline="true"
+                x5-playsinline="true"
                 preload="metadata"
                 controlsList="nodownload"
                 disablePictureInPicture
