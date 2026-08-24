@@ -54,7 +54,7 @@ export const HomePage: React.FC<HomePageProps> = ({
           </motion.div>
 
           {/* Hero Brand Signature */}
-          <div className="mb-8">
+          <div className="mb-8 overflow-visible py-2">
             <BrandMotionLogo
               size="hero"
               showSubtitle={false}

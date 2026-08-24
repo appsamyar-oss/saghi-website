@@ -70,6 +70,65 @@
   }
 }
 
+/* Handwriting & Calligraphic Signature Fonts */
+.font-handwriting {
+  font-family: 'Great Vibes', 'Alex Brush', 'Caveat', cursive, sans-serif;
+  letter-spacing: 0.03em;
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-nastaliq {
+  font-family: 'Noto Nastaliq Urdu', 'Vazirmatn', 'Amiri', serif;
+  line-height: 1.25;
+  letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Handwriting Pen Ink Glow and Shimmer */
+@keyframes pen-nib-pulse {
+  0%, 100% {
+    transform: scale(1) translate(0, 0);
+    opacity: 0.95;
+    filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.9)) drop-shadow(0 0 16px rgba(245, 158, 11, 0.6));
+  }
+  50% {
+    transform: scale(1.25) translate(1px, -1px);
+    opacity: 1;
+    filter: drop-shadow(0 0 12px rgba(254, 240, 138, 1)) drop-shadow(0 0 22px rgba(251, 191, 36, 0.9));
+  }
+}
+
+@keyframes gold-ink-shimmer {
+  0% {
+    background-position: -200% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
+}
+
+.animate-pen-nib {
+  animation: pen-nib-pulse 1.2s ease-in-out infinite;
+}
+
+.gold-ink-text {
+  background: linear-gradient(
+    90deg,
+    #FDF6B2 0%,
+    #FDE047 25%,
+    #FFFFFF 50%,
+    #F59E0B 75%,
+    #FEF08A 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.gold-ink-shimmer {
+  animation: gold-ink-shimmer 4s ease-in-out infinite;
+}
+
 /* Kinetic Variable Font Swap Animations (Inconsolata-VF) requested by user */
 @keyframes swapthings {
   0% {
