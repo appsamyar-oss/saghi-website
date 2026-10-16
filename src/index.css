@@ -1,13 +1,6 @@
 @import "tailwindcss";
 
-/* Inconsolata Variable Font Definition */
-@font-face {
-  font-family: 'Inconsolata';
-  src: url('https://ggayane.github.io/css-experiments/Inconsolata-VF.ttf');
-  font-weight: 275 900;
-  font-stretch: 50% 200%;
-  font-display: swap;
-}
+/* Inconsolata (variable width/weight) is loaded from Google Fonts in index.html */
 
 @layer base {
   :root {

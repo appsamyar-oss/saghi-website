@@ -46,10 +46,9 @@ import { AuthScreen } from '../auth/AuthScreen';
 import { SaghiEmblemLogo } from '../SaghiEmblemLogo';
 import { EmailInquiriesTab } from './EmailInquiriesTab';
 import { PublishPreviewModal, PreviewPayload } from './PublishPreviewModal';
-import { 
-  saveAdminCredentialsToFirestore, 
-  getAdminCredentialsFromFirestore,
-  saveArtworkToFirestore,
+import {
+  auth,
+  sendAdminPasswordReset,
   saveSiteConfigToFirestore,
 } from '../../firebase';
 
@@ -86,8 +85,6 @@ export const AdminModal: React.FC = () => {
   } = useApp();
 
   // Local States
-  const [passcode, setPasscode] = useState('');
-  const [authError, setAuthError] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Artwork Editor State
@@ -113,30 +110,10 @@ export const AdminModal: React.FC = () => {
   const [copiedPromptId, setCopiedPromptId] = useState<string | null>(null);
   const bgTextureInputRef = useRef<HTMLInputElement>(null);
 
-  // Admin Credentials Management State
-  const [adminUsernameInput, setAdminUsernameInput] = useState(siteConfig.adminCredentials?.username || 'saghi');
-  const [adminPasswordInput, setAdminPasswordInput] = useState(siteConfig.adminCredentials?.passwordHash || 'Saghi@Art2026');
-  const [showAdminPassword, setShowAdminPassword] = useState(false);
 
   // Preview Before Publish Modal State
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewDraft, setPreviewDraft] = useState<PreviewPayload | null>(null);
-
-  // Sync credentials from Firestore on admin panel mount
-  React.useEffect(() => {
-    let isMounted = true;
-    getAdminCredentialsFromFirestore().then((dbCreds) => {
-      if (isMounted && dbCreds?.username) {
-        setAdminUsernameInput(dbCreds.username);
-        if (dbCreds.password) {
-          setAdminPasswordInput(dbCreds.password);
-        }
-      }
-    });
-    return () => {
-      isMounted = false;
-    };
-  }, []);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -148,15 +125,11 @@ export const AdminModal: React.FC = () => {
 
     if (previewDraft.type === 'artwork') {
       const artworkData = previewDraft.data;
+      // addArtwork / updateArtwork also persist to Firestore for signed-in admins
       if (previewDraft.isNew) {
         addArtwork(artworkData);
       } else {
         updateArtwork(artworkData.id, artworkData);
-      }
-      try {
-        await saveArtworkToFirestore(artworkData);
-      } catch (err) {
-        console.warn('[AdminModal] Background Firestore artwork save notice:', err);
       }
       setEditingArtwork(null);
       setIsCreatingArtwork(false);
@@ -168,12 +141,8 @@ export const AdminModal: React.FC = () => {
           : 'Artwork successfully published live to gallery & Firebase!'
       );
     } else if (previewDraft.type === 'siteConfig') {
+      // updateSiteConfig also persists to Firestore for signed-in admins
       updateSiteConfig(previewDraft.data);
-      try {
-        await saveSiteConfigToFirestore(previewDraft.data);
-      } catch (err) {
-        console.warn('[AdminModal] Background Firestore siteConfig save notice:', err);
-      }
       setIsPreviewOpen(false);
       setPreviewDraft(null);
       showToast(
@@ -182,23 +151,6 @@ export const AdminModal: React.FC = () => {
           : 'Studio content & identity published live to Firebase!'
       );
     }
-  };
-
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (loginAdmin(passcode)) {
-      setAuthError(false);
-      setPasscode('');
-      showToast(isFa ? 'ورود با موفقیت انجام شد' : 'Authenticated successfully');
-    } else {
-      setAuthError(true);
-    }
-  };
-
-  const handleInstantDemoLogin = () => {
-    loginAdmin('1234');
-    setAuthError(false);
-    showToast(isFa ? 'ورود به حالت دمو انجام شد' : 'Demo access granted');
   };
 
   // Image Upload handler (Base64)
@@ -2511,116 +2463,48 @@ export const AdminModal: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Admin Access Credentials Manager */}
-                    <div className="p-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-black/60 to-black/80 border border-amber-500/30 space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                          <div className="p-2 rounded-xl bg-amber-400/20 text-amber-300">
-                            <KeyRound className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <h4 className="text-xs sm:text-sm font-bold font-mono text-white uppercase tracking-wider">
-                              {isFa ? 'نام کاربری و رمز عبور مدیریت (Admin Credentials)' : 'Studio Admin Access Credentials'}
-                            </h4>
-                            <p className="text-[11px] text-white/50 font-mono">
-                              {isFa ? 'مدیریت مشخصات امنیتی جهت ورود به کنترل پنل آتلیه' : 'Set custom username & master password for studio access'}
-                            </p>
-                          </div>
+                    {/* Admin Access: managed by Firebase Authentication */}
+                    <div className="p-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-black/60 to-black/80 border border-amber-500/30 space-y-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 rounded-xl bg-amber-400/20 text-amber-300">
+                          <KeyRound className="w-4 h-4" />
                         </div>
-                        <span className="text-[10px] font-mono px-2.5 py-1 rounded-full bg-amber-400/10 text-amber-400 border border-amber-400/30">
-                          {isFa ? 'امنیت فعال' : 'Protected'}
-                        </span>
-                      </div>
-
-                      <div className="grid sm:grid-cols-2 gap-4 pt-1">
-                        <div className="space-y-1.5">
-                          <label className="text-[11px] font-mono text-white/70 uppercase flex items-center justify-between">
-                            <span>{isFa ? 'نام کاربری ادمین (Username)' : 'Admin Username'}</span>
-                            <span className="text-[10px] text-amber-400/70">e.g. saghi</span>
-                          </label>
-                          <input
-                            type="text"
-                            value={adminUsernameInput}
-                            onChange={(e) => setAdminUsernameInput(e.target.value)}
-                            dir="ltr"
-                            placeholder="saghi"
-                            className="w-full bg-black/70 border border-white/15 focus:border-amber-400 rounded-xl px-4 py-2.5 text-xs text-white outline-none font-mono transition-colors"
-                          />
-                        </div>
-
-                        <div className="space-y-1.5">
-                          <label className="text-[11px] font-mono text-white/70 uppercase flex items-center justify-between">
-                            <span>{isFa ? 'رمز عبور مدیریت (Password)' : 'Master Password'}</span>
-                            <span className="text-[10px] text-amber-400/70">8+ chars</span>
-                          </label>
-                          <div className="relative">
-                            <input
-                              type={showAdminPassword ? 'text' : 'password'}
-                              value={adminPasswordInput}
-                              onChange={(e) => setAdminPasswordInput(e.target.value)}
-                              dir="ltr"
-                              placeholder="Saghi@Art2026"
-                              className="w-full bg-black/70 border border-white/15 focus:border-amber-400 rounded-xl px-4 py-2.5 pr-10 text-xs text-white outline-none font-mono transition-colors"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setShowAdminPassword(!showAdminPassword)}
-                              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors cursor-pointer"
-                            >
-                              {showAdminPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                            </button>
-                          </div>
+                        <div>
+                          <h4 className="text-xs sm:text-sm font-bold font-mono text-white uppercase tracking-wider">
+                            {isFa ? 'دسترسی مدیریت' : 'Studio Admin Access'}
+                          </h4>
+                          <p className="text-[11px] text-white/50 font-mono">
+                            {isFa
+                              ? 'ورود ادمین با Firebase Authentication انجام می‌شود. برای تغییر رمز، لینک بازیابی به ایمیل شما ارسال می‌شود.'
+                              : 'Admin sign-in uses Firebase Authentication. To change your password, a reset link is emailed to you.'}
+                          </p>
                         </div>
                       </div>
-
                       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2 border-t border-white/10 text-xs font-mono text-white/60">
-                        <span>
-                          {isFa 
-                            ? 'پیش‌فرض: نام کاربری: saghi | رمز عبور: Saghi@Art2026'
-                            : 'Default: Username: saghi | Password: Saghi@Art2026'}
-                        </span>
+                        <span dir="ltr">{auth.currentUser?.email || ''}</span>
                         <button
                           type="button"
                           onClick={async () => {
-                            if (!adminUsernameInput.trim()) {
-                              showToast(isFa ? 'نام کاربری نمی‌تواند خالی باشد' : 'Username cannot be empty');
-                              return;
+                            const email = auth.currentUser?.email;
+                            if (!email) return;
+                            try {
+                              await sendAdminPasswordReset(email);
+                              showToast(isFa ? 'لینک تغییر رمز به ایمیل شما ارسال شد' : 'Password reset link sent to your email');
+                            } catch {
+                              showToast(isFa ? 'ارسال لینک ناموفق بود' : 'Could not send reset link');
                             }
-                            if (adminPasswordInput.length < 6) {
-                              showToast(isFa ? 'رمز عبور باید حداقل ۶ کاراکتر باشد' : 'Password must be at least 6 characters');
-                              return;
-                            }
-                            const creds = {
-                              username: adminUsernameInput.trim(),
-                              password: adminPasswordInput,
-                              passwordHash: adminPasswordInput,
-                              email: siteConfig.email || 'contact@saghiabyar.com'
-                            };
-                            updateSiteConfig({ adminCredentials: creds });
-                            await saveAdminCredentialsToFirestore({
-                              username: creds.username,
-                              password: creds.password,
-                              email: creds.email,
-                            });
-                            showToast(isFa ? 'مشخصات ورود ادمین در دیتابیس و حافظه ذخیره شد' : 'Admin credentials saved to database');
                           }}
                           className="px-5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5"
                         >
-                          <Save className="w-3.5 h-3.5" />
-                          <span>{isFa ? 'ذخیره در دیتابیس' : 'Save to Database'}</span>
+                          <KeyRound className="w-3.5 h-3.5" />
+                          <span>{isFa ? 'تغییر رمز عبور' : 'Change Password'}</span>
                         </button>
                       </div>
                     </div>
 
                     <button
                       onClick={() => {
-                        updateSiteConfig({
-                          adminCredentials: {
-                            username: adminUsernameInput.trim() || 'saghi',
-                            passwordHash: adminPasswordInput || 'Saghi@Art2026',
-                            email: siteConfig.email || 'contact@saghiabyar.com'
-                          }
-                        });
+                        saveSiteConfigToFirestore(siteConfig);
                         showToast(t.admin.toastSaved);
                       }}
                       className="px-8 py-3 bg-white text-black hover:bg-gray-200 rounded-full font-bold text-xs uppercase tracking-widest font-mono cursor-pointer transition-all flex items-center gap-2"

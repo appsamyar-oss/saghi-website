@@ -1,4 +1,13 @@
 // Client-side helper for triggering Resend email endpoints
+import { getAdminIdToken } from '../firebase';
+
+/** Headers for admin-only endpoints: JSON plus the signed-in admin's Firebase ID token. */
+async function adminHeaders(json = true): Promise<Record<string, string>> {
+  const headers: Record<string, string> = json ? { 'Content-Type': 'application/json' } : {};
+  const token = await getAdminIdToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
 
 export interface SendInquiryPayload {
   name: string;
@@ -61,9 +70,8 @@ export async function dispatchInquiryEmail(payload: SendInquiryPayload): Promise
   } catch (err: any) {
     console.warn('[emailApi] Network request failed for dispatchInquiryEmail:', err);
     return {
-      success: true, // Graceful fallback
-      mode: 'simulated',
-      message: 'Inquiry saved locally. Email queued.',
+      success: false,
+      error: err?.message || 'Network error while sending inquiry email',
     };
   }
 }
@@ -80,9 +88,7 @@ export async function sendAdminReply(payload: SendReplyPayload): Promise<{
   try {
     const res = await fetch('/api/reply-email', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: await adminHeaders(),
       body: JSON.stringify(payload),
     });
 
@@ -109,7 +115,7 @@ export async function sendAdminReply(payload: SendReplyPayload): Promise<{
  */
 export async function fetchEmailServiceStatus(): Promise<EmailServiceStatus> {
   try {
-    const res = await fetch('/api/email-status');
+    const res = await fetch('/api/email-status', { headers: await adminHeaders(false) });
     if (res.ok) {
       return await res.json();
     }
@@ -128,7 +134,7 @@ export async function fetchEmailServiceStatus(): Promise<EmailServiceStatus> {
 /**
  * Triggers a test email to verify domain verification and delivery
  */
-export async function triggerTestEmail(targetEmail: string = 'help.system@ymail.com'): Promise<{
+export async function triggerTestEmail(targetEmail: string): Promise<{
   success: boolean;
   mode?: 'live' | 'simulated';
   targetEmail: string;
@@ -139,9 +145,7 @@ export async function triggerTestEmail(targetEmail: string = 'help.system@ymail.
   try {
     const res = await fetch('/api/send-test-email', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: await adminHeaders(),
       body: JSON.stringify({ targetEmail }),
     });
 
@@ -175,7 +179,7 @@ export async function syncInboundEmails(): Promise<{
   error?: string;
 }> {
   try {
-    const res = await fetch('/api/inbox/sync');
+    const res = await fetch('/api/inbox/sync', { headers: await adminHeaders(false) });
     const data = await res.json().catch(() => ({}));
     return {
       success: res.ok && data.success !== false,
@@ -210,9 +214,7 @@ export async function simulateInboundEmail(payload: {
   try {
     const res = await fetch('/api/inbox/simulate-inbound', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: await adminHeaders(),
       body: JSON.stringify(payload),
     });
     return await res.json();

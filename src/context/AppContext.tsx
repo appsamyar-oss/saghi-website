@@ -20,7 +20,20 @@ import {
 
 import { TRANSLATIONS } from '../data/translations';
 import { dispatchInquiryEmail, sendAdminReply, syncInboundEmails, simulateInboundEmail } from '../utils/emailApi';
-import { saveInquiryToFirestore, fetchInquiriesFromFirestore, deleteInquiryFromFirestore } from '../firebase';
+import {
+  saveInquiryToFirestore,
+  fetchInquiriesFromFirestore,
+  deleteInquiryFromFirestore,
+  fetchPublicContent,
+  saveArtworkToFirestore,
+  deleteArtworkFromFirestore,
+  saveCategoryToFirestore,
+  deleteCategoryFromFirestore,
+  publishAllContent,
+  saveSiteConfigToFirestore,
+  onAdminAuthChange,
+  signOutAdmin,
+} from '../firebase';
 
 interface AppContextType {
   // Localization
@@ -179,13 +192,49 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // 7. Admin UI & Auth State
   const [isAdminOpen, setIsAdminOpen] = useState<boolean>(false);
   const [adminTab, setAdminTab] = useState<AdminTab>('artworks');
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+  // Admin access comes only from a verified Firebase Auth session (see firebase.ts)
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [remoteContentLoaded, setRemoteContentLoaded] = useState<boolean>(false);
+  const [remoteHasArtworks, setRemoteHasArtworks] = useState<boolean>(false);
+  const [remoteFetchOk, setRemoteFetchOk] = useState<boolean>(false);
+
+  // Remove the legacy client-side auth flag that let anyone open the admin panel
+  useEffect(() => {
     try {
-      return localStorage.getItem(STORAGE_KEYS.AUTH) === 'true';
-    } catch (e) {
-      return false;
-    }
-  });
+      localStorage.removeItem(STORAGE_KEYS.AUTH);
+    } catch (e) {}
+  }, []);
+
+  // Load published content from Firestore so every visitor sees the admin's changes
+  useEffect(() => {
+    let cancelled = false;
+    fetchPublicContent()
+      .then((content) => {
+        if (cancelled) return;
+        setRemoteFetchOk(true);
+        if (content.artworks.length > 0) {
+          setArtworks(content.artworks as Artwork[]);
+          setRemoteHasArtworks(true);
+        }
+        if (content.categories.length > 0) {
+          setCategories(content.categories as CategoryItem[]);
+        }
+        if (content.siteConfig) {
+          const { adminCredentials: _legacy, updatedAt: _u, ...remoteConfig } = content.siteConfig;
+          setSiteConfig((prev) => ({ ...prev, ...remoteConfig }));
+        }
+      })
+      .catch((err) => console.warn('[AppContext] Could not load published content:', err))
+      .finally(() => {
+        if (!cancelled) setRemoteContentLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Track the Firebase admin session
+  useEffect(() => onAdminAuthChange((user) => setIsAuthenticated(Boolean(user))), []);
 
   // Synchronize HTML attributes with active language
   useEffect(() => {
@@ -234,6 +283,32 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [inquiries]);
 
+  // When the admin signs in: load every inquiry from Firestore, and if the
+  // database has no artworks yet, publish what the admin currently sees.
+  useEffect(() => {
+    if (!isAuthenticated || !remoteContentLoaded) return;
+    let cancelled = false;
+    fetchInquiriesFromFirestore().then((remote) => {
+      if (cancelled || remote.length === 0) return;
+      setInquiries((prev) => {
+        const byId = new Map<string, CommissionInquiry>();
+        prev.forEach((inq) => byId.set(inq.id, inq));
+        remote.forEach((inq: CommissionInquiry) => byId.set(inq.id, { ...byId.get(inq.id), ...inq }));
+        return Array.from(byId.values()).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+      });
+    });
+    // Only seed when we know for sure the database is empty (never after a failed read)
+    if (remoteFetchOk && !remoteHasArtworks) {
+      publishAllContent(artworks, categories).then((ok) => {
+        if (ok && !cancelled) setRemoteHasArtworks(true);
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, remoteContentLoaded]);
+
   // Language switcher
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);
@@ -258,18 +333,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       ...artworkData,
       id: newId,
     };
-    setArtworks((prev) => [newArtwork, ...prev]);
+    setArtworks((prev) => {
+      const minOrder = prev.reduce((min, a) => Math.min(min, typeof a.sortOrder === 'number' ? a.sortOrder : 0), 0);
+      const withOrder = { ...newArtwork, sortOrder: minOrder - 1 };
+      if (isAuthenticated) saveArtworkToFirestore(withOrder);
+      return [withOrder, ...prev];
+    });
     return newArtwork;
   };
 
   const updateArtwork = (id: string, updated: Partial<Artwork>) => {
     setArtworks((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, ...updated } : item))
+      prev.map((item) => {
+        if (item.id !== id) return item;
+        const next = { ...item, ...updated };
+        if (isAuthenticated) saveArtworkToFirestore(next);
+        return next;
+      })
     );
   };
 
   const deleteArtwork = (id: string) => {
     setArtworks((prev) => prev.filter((item) => item.id !== id));
+    if (isAuthenticated) deleteArtworkFromFirestore(id);
   };
 
   const getArtworkById = (id: string) => {
@@ -278,17 +364,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Categories CRUD
   const addCategory = (cat: CategoryItem) => {
-    setCategories((prev) => [...prev, cat]);
+    setCategories((prev) => {
+      const withOrder = { ...cat, sortOrder: prev.length };
+      if (isAuthenticated) saveCategoryToFirestore(withOrder);
+      return [...prev, withOrder];
+    });
   };
 
   const updateCategory = (id: string, cat: Partial<CategoryItem>) => {
     setCategories((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, ...cat } : item))
+      prev.map((item) => {
+        if (item.id !== id) return item;
+        const next = { ...item, ...cat };
+        if (isAuthenticated) saveCategoryToFirestore(next);
+        return next;
+      })
     );
   };
 
   const deleteCategory = (id: string) => {
     setCategories((prev) => prev.filter((c) => c.id !== id));
+    if (isAuthenticated) deleteCategoryFromFirestore(id);
   };
 
   // Site Config
@@ -297,6 +393,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       ...prev,
       ...newConfig,
     }));
+    if (isAuthenticated) saveSiteConfigToFirestore(newConfig);
   };
 
   // Inquiries
@@ -358,7 +455,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               userEmailSent: emailResult.userEmailSent,
               adminEmailSent: emailResult.adminEmailSent,
             };
-            saveInquiryToFirestore(updated).catch(() => {});
+            // Visitors may only create inquiries; status updates are admin-only
+            if (isAuthenticated) saveInquiryToFirestore(updated).catch(() => {});
             return updated;
           }
           return item;
@@ -655,19 +753,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   // Admin Auth
-  const loginAdmin = (user?: any): boolean => {
+  // Called by AuthScreen after a successful Firebase sign-in (admin membership already checked)
+  const loginAdmin = (_user?: any): boolean => {
     setIsAuthenticated(true);
-    try {
-      localStorage.setItem(STORAGE_KEYS.AUTH, 'true');
-    } catch (e) {}
     return true;
   };
 
   const logoutAdmin = () => {
     setIsAuthenticated(false);
-    try {
-      localStorage.removeItem(STORAGE_KEYS.AUTH);
-    } catch (e) {}
+    signOutAdmin().catch(() => {});
   };
 
   // Export JSON Database
@@ -698,6 +792,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
       if (parsed.inquiries && Array.isArray(parsed.inquiries)) {
         setInquiries(parsed.inquiries);
+      }
+      // Publish the restored backup so visitors see it too
+      if (isAuthenticated) {
+        publishAllContent(
+          Array.isArray(parsed.artworks) ? parsed.artworks : artworks,
+          Array.isArray(parsed.categories) ? parsed.categories : categories
+        );
+        if (parsed.siteConfig && typeof parsed.siteConfig === 'object') {
+          saveSiteConfigToFirestore(parsed.siteConfig);
+        }
       }
       return true;
     } catch (err) {

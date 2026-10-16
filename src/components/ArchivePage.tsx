@@ -16,7 +16,10 @@ import {
   Music,
   Play
 } from 'lucide-react';
-import { InfiniteGallery3D } from './InfiniteGallery3D';
+// three.js is heavy: only download the 3D gallery when a visitor opens it
+const InfiniteGallery3D = React.lazy(() =>
+  import('./InfiniteGallery3D').then((m) => ({ default: m.InfiniteGallery3D }))
+);
 
 interface ArchivePageProps {
   onSelectArtwork: (artwork: Artwork) => void;
@@ -215,11 +218,13 @@ export const ArchivePage: React.FC<ArchivePageProps> = ({
                   </button>
                 </div>
               ) : (
-                <InfiniteGallery3D
-                  artworks={filteredArtworks}
-                  onSelectArtwork={onSelectArtwork}
-                  onOpenInquiry={onOpenInquiry}
-                />
+                <React.Suspense fallback={<div className="h-[60vh]" />}>
+                  <InfiniteGallery3D
+                    artworks={filteredArtworks}
+                    onSelectArtwork={onSelectArtwork}
+                    onOpenInquiry={onOpenInquiry}
+                  />
+                </React.Suspense>
               )}
             </motion.div>
           ) : (

@@ -1,12 +1,45 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, doc, getDoc, setDoc, getDocFromServer } from 'firebase/firestore';
+import {
+  initializeFirestore,
+  getFirestore,
+  doc,
+  getDoc,
+  setDoc,
+  deleteDoc,
+  collection,
+  getDocs,
+  writeBatch,
+  type Firestore,
+} from 'firebase/firestore';
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  sendPasswordResetEmail,
+  type User,
+} from 'firebase/auth';
 import firebaseConfig from '../firebase-applet-config.json';
 
 // Initialize Firebase App instance safely
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
-// Initialize Firestore with the dedicated database ID
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || undefined);
+// Initialize Firestore with the dedicated database ID.
+// ignoreUndefinedProperties lets us save objects with optional (undefined) fields.
+function createDb(): Firestore {
+  const databaseId = firebaseConfig.firestoreDatabaseId || undefined;
+  try {
+    return databaseId
+      ? initializeFirestore(app, { ignoreUndefinedProperties: true }, databaseId)
+      : initializeFirestore(app, { ignoreUndefinedProperties: true });
+  } catch {
+    // Already initialized (e.g. during HMR)
+    return databaseId ? getFirestore(app, databaseId) : getFirestore(app);
+  }
+}
+
+export const db = createDb();
+export const auth = getAuth(app);
 
 export enum OperationType {
   CREATE = 'create',
@@ -17,91 +50,95 @@ export enum OperationType {
   WRITE = 'write',
 }
 
-export interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: {
-    userId?: string | null;
-    email?: string | null;
-    emailVerified?: boolean | null;
-    isAnonymous?: boolean | null;
-    tenantId?: string | null;
-  };
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.warn('[Firestore]', operationType, path, message);
+  return { error: message, operationType, path };
 }
 
-export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): FirestoreErrorInfo {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: null,
-      email: null,
-      emailVerified: null,
-      isAnonymous: true,
-      tenantId: null,
-    },
-    operationType,
-    path
-  };
-  console.warn('[Firestore Operation Notice]:', JSON.stringify(errInfo));
-  return errInfo;
-}
+// ---------------------------------------------------------------------------
+// Admin authentication (Firebase Authentication, email + password)
+// Admin rights are granted by a document at admins/{uid} (see firestore.rules).
+// ---------------------------------------------------------------------------
 
-// Validate Connection to Firestore on boot
-export async function testConnection() {
-  try {
-    await getDocFromServer(doc(db, 'config', 'admin_auth'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('[Firestore] Connection notice: client offline or verifying credentials.');
-    }
+export async function signInAdmin(email: string, password: string): Promise<User> {
+  const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
+  const isAdmin = await checkIsAdmin(cred.user.uid);
+  if (!isAdmin) {
+    await signOut(auth);
+    throw new Error('not-admin');
   }
+  return cred.user;
 }
 
-testConnection();
-
-export interface FirestoreAdminAuth {
-  username: string;
-  password: string;
-  email?: string;
-  updatedAt?: string;
+export async function signOutAdmin(): Promise<void> {
+  await signOut(auth);
 }
 
-/**
- * Fetches admin authentication credentials directly from Firestore database
- * Collection: "config" -> Document: "admin_auth"
- */
-export async function getAdminCredentialsFromFirestore(): Promise<FirestoreAdminAuth | null> {
-  const path = 'config/admin_auth';
+export async function sendAdminPasswordReset(email: string): Promise<void> {
+  await sendPasswordResetEmail(auth, email.trim());
+}
+
+export async function checkIsAdmin(uid: string): Promise<boolean> {
   try {
-    const docRef = doc(db, 'config', 'admin_auth');
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      const data = docSnap.data() as FirestoreAdminAuth;
-      return data;
-    }
+    const snap = await getDoc(doc(db, 'admins', uid));
+    return snap.exists();
   } catch (err) {
-    handleFirestoreError(err, OperationType.GET, path);
-  }
-  return null;
-}
-
-/**
- * Saves or updates admin credentials directly in Firestore database
- */
-export async function saveAdminCredentialsToFirestore(creds: FirestoreAdminAuth): Promise<boolean> {
-  const path = 'config/admin_auth';
-  try {
-    const docRef = doc(db, 'config', 'admin_auth');
-    await setDoc(docRef, {
-      ...creds,
-      updatedAt: new Date().toISOString(),
-    }, { merge: true });
-    return true;
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, path);
+    handleFirestoreError(err, OperationType.GET, `admins/${uid}`);
     return false;
   }
+}
+
+/**
+ * Subscribes to admin auth state. Calls back with the user only when they
+ * are signed in AND listed in the admins collection.
+ */
+export function onAdminAuthChange(callback: (user: User | null) => void): () => void {
+  return onAuthStateChanged(auth, async (user) => {
+    if (!user) return callback(null);
+    callback((await checkIsAdmin(user.uid)) ? user : null);
+  });
+}
+
+/** Returns the current user's ID token for authenticating admin API calls. */
+export async function getAdminIdToken(): Promise<string | null> {
+  const user = auth.currentUser;
+  return user ? user.getIdToken() : null;
+}
+
+// ---------------------------------------------------------------------------
+// Public site content
+// ---------------------------------------------------------------------------
+
+export interface PublicContent {
+  artworks: any[];
+  categories: any[];
+  siteConfig: Record<string, any> | null;
+}
+
+function sortByOrder(list: any[]): any[] {
+  return [...list].sort((a, b) => {
+    const ao = typeof a.sortOrder === 'number' ? a.sortOrder : Number.MAX_SAFE_INTEGER;
+    const bo = typeof b.sortOrder === 'number' ? b.sortOrder : Number.MAX_SAFE_INTEGER;
+    if (ao !== bo) return ao - bo;
+    return String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
+  });
+}
+
+/** Loads published artworks, categories and site config for every visitor. */
+export async function fetchPublicContent(): Promise<PublicContent> {
+  const [artSnap, catSnap, configSnap] = await Promise.all([
+    getDocs(collection(db, 'artworks')),
+    getDocs(collection(db, 'categories')),
+    getDoc(doc(db, 'config', 'main_site_config')),
+  ]);
+  const artworks = artSnap.docs.map((d) => ({ ...d.data(), id: d.id }));
+  const categories = catSnap.docs.map((d) => ({ ...d.data(), id: d.id }));
+  return {
+    artworks: sortByOrder(artworks),
+    categories: sortByOrder(categories),
+    siteConfig: configSnap.exists() ? (configSnap.data() as Record<string, any>) : null,
+  };
 }
 
 /**
@@ -111,14 +148,13 @@ export async function saveArtworkToFirestore(artwork: any): Promise<boolean> {
   const artworkId = artwork.id || `sa-${Date.now()}`;
   const path = `artworks/${artworkId}`;
   try {
-    const docRef = doc(db, 'artworks', artworkId);
-    const cleanData = {
+    const now = new Date().toISOString();
+    await setDoc(doc(db, 'artworks', artworkId), {
       ...artwork,
       id: artworkId,
-      updatedAt: new Date().toISOString(),
-      createdAt: artwork.createdAt || new Date().toISOString(),
-    };
-    await setDoc(docRef, cleanData, { merge: true });
+      updatedAt: now,
+      createdAt: artwork.createdAt || now,
+    }, { merge: true });
     return true;
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, path);
@@ -132,9 +168,29 @@ export async function saveArtworkToFirestore(artwork: any): Promise<boolean> {
 export async function deleteArtworkFromFirestore(artworkId: string): Promise<boolean> {
   const path = `artworks/${artworkId}`;
   try {
-    const { deleteDoc } = await import('firebase/firestore');
-    const docRef = doc(db, 'artworks', artworkId);
-    await deleteDoc(docRef);
+    await deleteDoc(doc(db, 'artworks', artworkId));
+    return true;
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, path);
+    return false;
+  }
+}
+
+export async function saveCategoryToFirestore(category: any): Promise<boolean> {
+  const path = `categories/${category.id}`;
+  try {
+    await setDoc(doc(db, 'categories', category.id), category, { merge: true });
+    return true;
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, path);
+    return false;
+  }
+}
+
+export async function deleteCategoryFromFirestore(categoryId: string): Promise<boolean> {
+  const path = `categories/${categoryId}`;
+  try {
+    await deleteDoc(doc(db, 'categories', categoryId));
     return true;
   } catch (err) {
     handleFirestoreError(err, OperationType.DELETE, path);
@@ -148,9 +204,10 @@ export async function deleteArtworkFromFirestore(artworkId: string): Promise<boo
 export async function saveSiteConfigToFirestore(config: any): Promise<boolean> {
   const path = 'config/main_site_config';
   try {
-    const docRef = doc(db, 'config', 'main_site_config');
-    await setDoc(docRef, {
-      ...config,
+    // Never persist legacy credential fields
+    const { adminCredentials: _ignored, ...safeConfig } = config || {};
+    await setDoc(doc(db, 'config', 'main_site_config'), {
+      ...safeConfig,
       updatedAt: new Date().toISOString(),
     }, { merge: true });
     return true;
@@ -161,22 +218,51 @@ export async function saveSiteConfigToFirestore(config: any): Promise<boolean> {
 }
 
 /**
+ * Writes every artwork and category in one go (used to seed an empty database
+ * with the content the admin currently sees).
+ */
+export async function publishAllContent(artworks: any[], categories: any[]): Promise<boolean> {
+  try {
+    const now = new Date().toISOString();
+    // Firestore batches are limited to 500 writes
+    const writes: Array<[string, string, any]> = [
+      ...artworks.map((a, i) => ['artworks', a.id, { ...a, sortOrder: i, createdAt: a.createdAt || now, updatedAt: now }] as [string, string, any]),
+      ...categories.map((c, i) => ['categories', c.id, { ...c, sortOrder: i }] as [string, string, any]),
+    ];
+    for (let i = 0; i < writes.length; i += 450) {
+      const batch = writeBatch(db);
+      for (const [col, id, data] of writes.slice(i, i + 450)) {
+        batch.set(doc(db, col, id), data, { merge: true });
+      }
+      await batch.commit();
+    }
+    return true;
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, 'publishAllContent');
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Inquiries
+// ---------------------------------------------------------------------------
+
+/**
  * Saves or updates an inquiry (including messages & tags) in Firestore collection "inquiries"
  */
 export async function saveInquiryToFirestore(inquiry: any): Promise<boolean> {
   const inquiryId = inquiry.id || `inq-${Date.now()}`;
   const path = `inquiries/${inquiryId}`;
   try {
-    const docRef = doc(db, 'inquiries', inquiryId);
-    const cleanData = {
+    const now = new Date().toISOString();
+    await setDoc(doc(db, 'inquiries', inquiryId), {
       ...inquiry,
       id: inquiryId,
-      updatedAt: new Date().toISOString(),
-      createdAt: inquiry.createdAt || new Date().toISOString(),
+      updatedAt: now,
+      createdAt: inquiry.createdAt || now,
       tags: Array.isArray(inquiry.tags) ? inquiry.tags : [],
       messages: Array.isArray(inquiry.messages) ? inquiry.messages : [],
-    };
-    await setDoc(docRef, cleanData, { merge: true });
+    }, { merge: true });
     return true;
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, path);
@@ -185,21 +271,14 @@ export async function saveInquiryToFirestore(inquiry: any): Promise<boolean> {
 }
 
 /**
- * Fetches all inquiries from Firestore
+ * Fetches all inquiries from Firestore (admin only)
  */
 export async function fetchInquiriesFromFirestore(): Promise<any[]> {
-  const path = 'inquiries';
   try {
-    const { collection, getDocs } = await import('firebase/firestore');
-    const colRef = collection(db, 'inquiries');
-    const snap = await getDocs(colRef);
-    const list: any[] = [];
-    snap.forEach((d) => {
-      list.push({ id: d.id, ...d.data() });
-    });
-    return list;
+    const snap = await getDocs(collection(db, 'inquiries'));
+    return snap.docs.map((d) => ({ ...d.data(), id: d.id }));
   } catch (err) {
-    handleFirestoreError(err, OperationType.GET, path);
+    handleFirestoreError(err, OperationType.LIST, 'inquiries');
     return [];
   }
 }
@@ -210,14 +289,10 @@ export async function fetchInquiriesFromFirestore(): Promise<any[]> {
 export async function deleteInquiryFromFirestore(inquiryId: string): Promise<boolean> {
   const path = `inquiries/${inquiryId}`;
   try {
-    const { deleteDoc } = await import('firebase/firestore');
-    const docRef = doc(db, 'inquiries', inquiryId);
-    await deleteDoc(docRef);
+    await deleteDoc(doc(db, 'inquiries', inquiryId));
     return true;
   } catch (err) {
     handleFirestoreError(err, OperationType.DELETE, path);
     return false;
   }
 }
-
-
