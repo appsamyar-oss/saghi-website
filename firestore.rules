@@ -9,6 +9,11 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Admin rights: a document at admins/{uid} created by the owner in the Firebase console
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
     function existing() {
       return resource.data;
     }
@@ -36,18 +41,6 @@ service cloud.firestore {
              data.labelFa is string && data.labelFa.size() <= 100;
     }
 
-    function isValidAdminAuth(data) {
-      return data.keys().hasAll(['username', 'password']) &&
-             data.username is string && data.username.size() >= 1 && data.username.size() <= 100 &&
-             data.password is string && data.password.size() >= 4 && data.password.size() <= 200 &&
-             (!('email' in data) || (data.email is string && data.email.size() <= 150)) &&
-             (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 100));
-    }
-
-    function isValidConfigDoc(id, data) {
-      return id == 'admin_auth' ? isValidAdminAuth(data) : true;
-    }
-
     function isValidInquiry(data) {
       return data.keys().hasAll(['name', 'email', 'message', 'status', 'createdAt']) &&
              data.name is string && data.name.size() <= 100 &&
@@ -62,36 +55,37 @@ service cloud.firestore {
              (!('replyMessage' in data) || (data.replyMessage is string && data.replyMessage.size() <= 5000));
     }
 
+    match /admins/{uid} {
+      allow get: if isSignedIn() && request.auth.uid == uid;
+      allow list, write: if false;
+    }
+
+    // Published content: everyone can read, only admins can change
     match /artworks/{artworkId} {
-      allow read: if isValidId(artworkId);
-      allow create: if isValidId(artworkId) && isValidArtwork(incoming());
-      allow update: if isValidId(artworkId) && isValidArtwork(incoming());
-      allow delete: if isValidId(artworkId);
-      allow list: if true;
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidId(artworkId) && isValidArtwork(incoming());
+      allow delete: if isAdmin() && isValidId(artworkId);
     }
 
     match /categories/{categoryId} {
-      allow read: if isValidId(categoryId);
-      allow create: if isValidId(categoryId) && isValidCategory(incoming());
-      allow update: if isValidId(categoryId) && isValidCategory(incoming());
-      allow delete: if isValidId(categoryId);
-      allow list: if true;
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidId(categoryId) && isValidCategory(incoming());
+      allow delete: if isAdmin() && isValidId(categoryId);
     }
 
     match /config/{configId} {
-      allow read: if isValidId(configId);
-      allow create: if isValidId(configId) && isValidConfigDoc(configId, incoming());
-      allow update: if isValidId(configId) && isValidConfigDoc(configId, incoming());
-      allow delete: if isValidId(configId);
-      allow list: if true;
+      allow get: if configId == 'main_site_config' || isAdmin();
+      allow list: if isAdmin();
+      allow create, update: if isAdmin() && configId == 'main_site_config';
+      allow delete: if isAdmin() && configId != 'main_site_config';
     }
 
+    // Visitors may submit a new inquiry; only admins can read, edit or delete them
     match /inquiries/{inquiryId} {
-      allow read: if isValidId(inquiryId);
-      allow create: if isValidId(inquiryId) && isValidInquiry(incoming());
-      allow update: if isValidId(inquiryId) && isValidInquiry(incoming());
-      allow delete: if isValidId(inquiryId);
-      allow list: if true;
+      allow create: if isValidId(inquiryId) && isValidInquiry(incoming()) && incoming().status == 'new';
+      allow read: if isAdmin();
+      allow update: if isAdmin() && isValidInquiry(incoming());
+      allow delete: if isAdmin();
     }
   }
 }

@@ -517,11 +517,6 @@ export const INITIAL_SITE_CONFIG: SiteConfig = {
   ],
   backgroundPrompts: INITIAL_BACKGROUND_PROMPTS,
   backgroundSettings: INITIAL_BACKGROUND_SETTINGS,
-  adminCredentials: {
-    username: 'saghi',
-    passwordHash: 'Saghi@Art2026',
-    email: 'contact@saghiabyar.com',
-  },
 };
 
 export const INITIAL_INQUIRIES: CommissionInquiry[] = [

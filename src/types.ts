@@ -11,6 +11,7 @@ export interface CategoryItem {
   id: string;
   labelEn: string;
   labelFa: string;
+  sortOrder?: number;
 }
 
 export type MediaType = 'image' | 'audio' | 'video';
@@ -75,6 +76,9 @@ export interface Artwork {
   // Purchase & Commission features
   canPurchase?: boolean;
   canCommission?: boolean;
+  sortOrder?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface ThreadMessage {
@@ -221,11 +225,6 @@ export interface SiteConfig {
   stories: SiteStory[];
   backgroundSettings?: BackgroundSettings;
   backgroundPrompts?: BackgroundPrompt[];
-  adminCredentials?: {
-    username: string;
-    passwordHash: string; // or password
-    email?: string;
-  };
 }
 
 export interface CommissionForm {

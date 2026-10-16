@@ -1,7 +1,9 @@
 import express from "express";
 import path from "path";
-import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
+import rateLimit from "express-rate-limit";
+import { z } from "zod";
+import { requireAdmin } from "./server/adminAuth";
 import { 
   sendInquiryEmails, 
   sendAdminReplyEmail, 
@@ -14,11 +16,38 @@ import {
 
 dotenv.config();
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+const inquirySchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  email: z.string().trim().email().max(100),
+  phone: z.string().trim().max(40).optional(),
+  inquiryType: z.string().trim().max(50).optional(),
+  artworkTitle: z.string().trim().max(300).optional(),
+  dimensions: z.string().trim().max(200).optional(),
+  interest: z.string().trim().max(300).optional(),
+  message: z.string().trim().min(1).max(5000),
+  inquiryId: z.string().trim().max(128).optional(),
+});
 
-  app.use(express.json({ limit: "25mb" }));
+// Public inquiry form: limit how many confirmation emails one visitor can trigger
+const inquiryLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: { success: false, error: "Too many requests, please try again later." },
+});
+
+export const app = express();
+app.disable("x-powered-by");
+// Behind Vercel / Cloud Run proxies: use the client IP for rate limiting
+app.set("trust proxy", 1);
+
+async function startServer() {
+  const PORT = Number(process.env.PORT) || 3000;
+
+  // Webhook signature verification needs the raw body, so parse it before express.json
+  app.use("/api/webhooks/resend", express.raw({ type: "*/*", limit: "1mb" }));
+  app.use(express.json({ limit: "1mb" }));
 
   // Health check API
   app.get("/api/health", (_req, res) => {
@@ -30,7 +59,7 @@ async function startServer() {
   });
 
   // Email Service Status & Config API
-  app.get("/api/email-status", (_req, res) => {
+  app.get("/api/email-status", requireAdmin, (_req, res) => {
     const isConfigured = Boolean(process.env.RESEND_API_KEY && process.env.RESEND_API_KEY.trim() !== "");
     const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || "appsamyar@gmail.com";
     const senderEmail = process.env.SENDER_EMAIL || "Saghi Abyar Studio <contact@saghiabyar.com>";
@@ -45,16 +74,16 @@ async function startServer() {
   });
 
   // 1. Submit Inquiry & Dispatch Auto-Confirmation + Admin Alert
-  app.post("/api/send-email", async (req, res) => {
+  app.post("/api/send-email", inquiryLimiter, async (req, res) => {
     try {
-      const { name, email, phone, inquiryType, artworkTitle, dimensions, interest, message, inquiryId } = req.body;
-
-      if (!email || !name || !message) {
+      const parsed = inquirySchema.safeParse(req.body);
+      if (!parsed.success) {
         return res.status(400).json({ 
           success: false, 
-          error: "Missing required fields (name, email, message)" 
+          error: "Missing or invalid fields (name, email, message)" 
         });
       }
+      const { name, email, phone, inquiryType, artworkTitle, dimensions, interest, message, inquiryId } = parsed.data;
 
       const result = await sendInquiryEmails({
         name,
@@ -80,7 +109,7 @@ async function startServer() {
   });
 
   // 2. Admin Direct Reply to Customer Inquiry
-  app.post("/api/reply-email", async (req, res) => {
+  app.post("/api/reply-email", requireAdmin, async (req, res) => {
     try {
       const { toEmail, toName, subject, message, originalMessage, inquiryId } = req.body;
 
@@ -111,9 +140,12 @@ async function startServer() {
   });
 
   // 3. Test Email Dispatch to verify custom domain (e.g., help.system@ymail.com)
-  app.post("/api/send-test-email", async (req, res) => {
+  app.post("/api/send-test-email", requireAdmin, async (req, res) => {
     try {
-      const targetEmail = req.body?.targetEmail || "help.system@ymail.com";
+      const targetEmail = String(req.body?.targetEmail || (req as any).adminUser?.email || "").trim();
+      if (!z.string().email().safeParse(targetEmail).success) {
+        return res.status(400).json({ success: false, error: "A valid targetEmail is required" });
+      }
       const result = await sendTestEmail(targetEmail);
       return res.json(result);
     } catch (error: any) {
@@ -129,9 +161,36 @@ async function startServer() {
   // Receives real-time incoming collector messages sent to studio domain
   app.post("/api/webhooks/resend", async (req, res) => {
     try {
-      console.log("[Resend Webhook] Received inbound webhook event:", req.body?.type || "raw");
+      const rawBody = Buffer.isBuffer(req.body) ? req.body.toString("utf8") : JSON.stringify(req.body || {});
+      const webhookSecret = process.env.RESEND_WEBHOOK_SECRET;
+      const resend = getResendClient();
+      if (webhookSecret && resend) {
+        try {
+          resend.webhooks.verify({
+            payload: rawBody,
+            headers: {
+              id: String(req.headers["svix-id"] || req.headers["webhook-id"] || ""),
+              timestamp: String(req.headers["svix-timestamp"] || req.headers["webhook-timestamp"] || ""),
+              signature: String(req.headers["svix-signature"] || req.headers["webhook-signature"] || ""),
+            },
+            webhookSecret,
+          });
+        } catch {
+          return res.status(401).json({ success: false, error: "Invalid webhook signature" });
+        }
+      } else if (process.env.NODE_ENV === "production") {
+        return res.status(503).json({ success: false, error: "Webhook secret not configured" });
+      }
+
+      let body: any;
+      try {
+        body = JSON.parse(rawBody);
+      } catch {
+        return res.status(400).json({ success: false, error: "Invalid JSON" });
+      }
+      console.log("[Resend Webhook] Received inbound webhook event:", body?.type || "raw");
       
-      const parsedMessage = parseInboundWebhookEvent(req.body);
+      const parsedMessage = parseInboundWebhookEvent(body);
       if (!parsedMessage) {
         return res.status(400).json({ success: false, error: "Invalid webhook payload format" });
       }
@@ -153,7 +212,7 @@ async function startServer() {
   });
 
   // 5. Inbound Sync API (On-demand pull from Resend Receiving API)
-  app.all("/api/inbox/sync", async (_req, res) => {
+  app.get("/api/inbox/sync", requireAdmin, async (_req, res) => {
     try {
       const result = await fetchInboundEmailsFromResend();
       return res.json(result);
@@ -167,7 +226,7 @@ async function startServer() {
   });
 
   // 6. Inbound Email Detail API
-  app.get("/api/inbox/email/:emailId", async (req, res) => {
+  app.get("/api/inbox/email/:emailId", requireAdmin, async (req, res) => {
     try {
       const emailId = req.params.emailId;
       const result = await fetchInboundEmailDetails(emailId);
@@ -182,7 +241,7 @@ async function startServer() {
   });
 
   // 7. Simulated Collector Inbound Reply (For development and testing)
-  app.post("/api/inbox/simulate-inbound", async (req, res) => {
+  app.post("/api/inbox/simulate-inbound", requireAdmin, async (req, res) => {
     try {
       const { inquiryId, senderName, senderEmail, message, subject } = req.body;
       const createdAt = new Date().toISOString();
@@ -214,57 +273,6 @@ async function startServer() {
     }
   });
 
-  // 8. Secure Admin Authentication Verification (Keeps credentials server-side / Firestore backed)
-  app.post("/api/admin/verify", async (req, res) => {
-    try {
-      const { identifier, password } = req.body;
-      if (!identifier || !password) {
-        return res.status(400).json({ success: false, error: "Missing identifier or password" });
-      }
-
-      const inputId = String(identifier).trim().toLowerCase();
-      const inputPass = String(password);
-
-      // Default master credentials fallback if database not yet initialized
-      const defaultUsername = (process.env.ADMIN_DEFAULT_USERNAME || "saghi").toLowerCase();
-      const defaultPassword = process.env.ADMIN_DEFAULT_PASSWORD || "Saghi@Art2026";
-      const defaultEmail = (process.env.ADMIN_NOTIFICATION_EMAIL || "contact@saghiabyar.com").toLowerCase();
-
-      // Check if matches default or configured admin
-      const isUserMatch = 
-        inputId === defaultUsername ||
-        inputId === defaultEmail ||
-        inputId === "admin" ||
-        inputId === "appsamyar@gmail.com" ||
-        inputId === "admin@saghiabyar.com";
-
-      const isPassMatch = 
-        inputPass === defaultPassword ||
-        inputPass === "Saghi@Art2026" ||
-        inputPass === "admin123456";
-
-      if (isUserMatch && isPassMatch) {
-        return res.json({
-          success: true,
-          user: {
-            name: "Saghi Abyar Admin",
-            username: defaultUsername,
-            email: defaultEmail,
-            role: "master_admin"
-          }
-        });
-      }
-
-      return res.status(401).json({
-        success: false,
-        error: "Invalid admin username or password"
-      });
-    } catch (error: any) {
-      console.error("[API /api/admin/verify] Exception:", error);
-      return res.status(500).json({ success: false, error: "Server authentication error" });
-    }
-  });
-
   // Disable caching for HTML entry points to ensure instant client updates
   app.use((req, res, next) => {
     if (req.path === "/" || req.path.endsWith(".html") || req.path.startsWith("/api/")) {
@@ -277,7 +285,8 @@ async function startServer() {
   });
 
   // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
+  if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -285,7 +294,9 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
+    // Hashed build assets never change, so let browsers cache them for a year
+    app.use("/assets", express.static(path.join(distPath, "assets"), { immutable: true, maxAge: "1y" }));
+    app.use(express.static(distPath, { index: false }));
     app.get("*", (_req, res) => {
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
       res.setHeader("Pragma", "no-cache");
@@ -294,9 +305,13 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Saghi Abyar Official Studio server running on http://localhost:${PORT}`);
-  });
+  if (!process.env.VERCEL) {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Saghi Abyar Official Studio server running on http://localhost:${PORT}`);
+    });
+  }
 }
 
 startServer();
+
+export default app;

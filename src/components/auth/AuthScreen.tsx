@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext';
 import { X, Mail, Lock, User, Loader2, ShieldCheck, KeyRound, Eye, EyeOff, Database, Sparkles } from 'lucide-react';
 import { SaghiEmblemLogo } from '../SaghiEmblemLogo';
 import { FakeDecoyGateway } from './FakeDecoyGateway';
-import { getAdminCredentialsFromFirestore } from '../../firebase';
+import { signInAdmin, sendAdminPasswordReset } from '../../firebase';
 
 interface AuthScreenProps {
   onClose: () => void;
@@ -12,11 +12,11 @@ interface AuthScreenProps {
 }
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, onSuccess }) => {
-  const { isFa, siteConfig, updateSiteConfig } = useApp();
+  const { isFa } = useApp();
   const [view, setView] = useState<'login' | 'signup' | 'forgot' | 'verify'>('login');
   
   // Form States (Supports both username or email for admin login)
-  const [identifier, setIdentifier] = useState(''); // username or email
+  const [identifier, setIdentifier] = useState(''); // admin email
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -57,9 +57,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, onSuccess }) =>
     setSuccessMsg(null);
 
     try {
-      // Security processing delay
-      await new Promise(res => setTimeout(res, 800));
-
       if (view === 'signup') {
         if (!isPasswordValid) throw new Error(isFa ? 'رمز عبور امن نیست' : 'Password does not meet security requirements');
         
@@ -67,69 +64,23 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, onSuccess }) =>
         setTimeout(() => setView('login'), 1500);
       } 
       else if (view === 'login') {
-        const inputId = identifier.trim().toLowerCase();
-
-        // 1. Try secure backend endpoint first
-        let backendVerified = false;
         try {
-          const verifyRes = await fetch('/api/admin/verify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ identifier: inputId, password })
-          });
-          if (verifyRes.ok) {
-            const data = await verifyRes.json();
-            if (data.success) {
-              backendVerified = true;
-              onSuccess({ 
-                name: data.user?.name || 'Saghi Abyar Admin', 
-                username: data.user?.username || 'saghi',
-                email: data.user?.email || 'contact@saghiabyar.com' 
-              });
-              return;
-            }
+          const user = await signInAdmin(identifier, password);
+          onSuccess({ name: user.displayName || 'Saghi Abyar Admin', email: user.email });
+        } catch (authErr: any) {
+          const code = String(authErr?.code || authErr?.message || '');
+          if (code === 'not-admin') {
+            throw new Error(isFa ? 'این حساب دسترسی مدیریت ندارد' : 'This account does not have admin access');
           }
-        } catch (apiErr) {
-          console.warn('Backend verify offline or failed, trying database/local credentials');
-        }
-
-        // 2. Fetch live credentials from Firestore / local config fallback
-        let liveDbCreds = null;
-        try {
-          liveDbCreds = await getAdminCredentialsFromFirestore();
-        } catch (dbErr) {
-          console.warn('Could not read credentials from Firestore, using local fallback:', dbErr);
-        }
-
-        const configuredAdmin = liveDbCreds || siteConfig.adminCredentials || {
-          username: 'saghi',
-          passwordHash: 'Saghi@Art2026',
-          email: 'contact@saghiabyar.com'
-        };
-
-        const isUserMatch = 
-          inputId === (configuredAdmin.username || 'saghi').toLowerCase() ||
-          inputId === (configuredAdmin.email || 'contact@saghiabyar.com').toLowerCase() ||
-          inputId === 'admin' ||
-          inputId === 'appsamyar@gmail.com' ||
-          inputId === 'admin@saghiabyar.com';
-
-        const isPassMatch = 
-          password === (configuredAdmin.password || (configuredAdmin as any).passwordHash || 'Saghi@Art2026') ||
-          password === 'Saghi@Art2026' ||
-          password === 'admin123456';
-
-        if (isUserMatch && isPassMatch) {
-          onSuccess({ 
-            name: 'Saghi Abyar Admin', 
-            username: configuredAdmin.username || 'saghi',
-            email: configuredAdmin.email || 'contact@saghiabyar.com' 
-          });
-        } else {
-          throw new Error(isFa ? 'نام کاربری یا رمز عبور اشتباه است' : 'Invalid username or password');
+          if (code.includes('too-many-requests')) {
+            throw new Error(isFa ? 'تلاش‌های زیاد. کمی بعد دوباره امتحان کنید' : 'Too many attempts. Please try again later');
+          }
+          throw new Error(isFa ? 'ایمیل یا رمز عبور اشتباه است' : 'Invalid email or password');
         }
       }
       else if (view === 'forgot') {
+        // Same message whether or not the account exists, to avoid leaking which emails are registered
+        await sendAdminPasswordReset(email).catch(() => {});
         setSuccessMsg(isFa ? 'در صورت مطابقت نام کاربری/ایمیل، دستورالعمل بازیابی ارسال شد.' : 'If an account matches, recovery instructions have been sent.');
         setTimeout(() => setView('login'), 3000);
       }
@@ -260,11 +211,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, onSuccess }) =>
               <div className="relative group">
                 <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 group-focus-within:text-amber-400 transition-colors" />
                 <input
-                  type="text"
+                  type="email"
                   required
+                  autoComplete="username"
                   value={identifier}
                   onChange={e => setIdentifier(e.target.value)}
-                  placeholder={isFa ? 'نام کاربری یا ایمیل مدیریت (saghi)' : 'Admin Username or Email (saghi)'}
+                  placeholder={isFa ? 'ایمیل مدیریت' : 'Admin Email'}
                   dir="ltr"
                   className="glowing-input-field pl-11 font-mono text-xs sm:text-sm"
                 />
@@ -293,7 +245,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, onSuccess }) =>
                     required
                     value={password}
                     onChange={e => setPassword(e.target.value)}
-                    placeholder={isFa ? 'رمز عبور (Saghi@Art2026)' : 'Password'}
+                    autoComplete={view === 'login' ? 'current-password' : 'new-password'}
+                    placeholder={isFa ? 'رمز عبور' : 'Password'}
                     dir="ltr"
                     className="glowing-input-field pl-11 pr-11 font-mono text-xs sm:text-sm"
                   />
@@ -384,14 +337,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, onSuccess }) =>
           </form>
 
           <div className="mt-5 text-center text-xs font-mono text-white/40">
-            {view === 'login' ? (
-              <p>
-                {isFa ? 'عضو جدید آتلیه هستید؟ ' : 'New to the studio? '}
-                <button onClick={() => { setView('signup'); setError(null); setPassword(''); }} className="text-amber-400 hover:underline cursor-pointer">
-                  {isFa ? 'ایجاد حساب کاربری' : 'Create an account'}
-                </button>
-              </p>
-            ) : view === 'signup' ? (
+            {view === 'login' ? null : view === 'signup' ? (
               <p>
                 {isFa ? 'قبلاً ثبت‌نام کرده‌اید؟ ' : 'Already a member? '}
                 <button onClick={() => { setView('login'); setError(null); }} className="text-amber-400 hover:underline cursor-pointer">

@@ -10,7 +10,10 @@ import { AboutPage } from './components/AboutPage';
 import { ContactPage } from './components/ContactPage';
 import { PhotoDetailModal } from './components/PhotoDetailModal';
 import { PurchaseInquiryModal } from './components/PurchaseInquiryModal';
-import { AdminModal } from './components/admin/AdminModal';
+// The admin panel is large and only needed by the studio owner, so load it on demand
+const AdminModal = React.lazy(() =>
+  import('./components/admin/AdminModal').then((m) => ({ default: m.AdminModal }))
+);
 import { AmbientOilCanvas } from './components/AmbientOilCanvas';
 import { SplashScreen } from './components/SplashScreen';
 import { FloatingWhatsAppButton } from './components/FloatingWhatsAppButton';
@@ -136,10 +139,11 @@ function MainApp() {
       />
 
       {/* 3. Complete Admin Management Panel */}
-      <AdminModal
-        isOpen={isAdminOpen}
-        onClose={() => setIsAdminOpen(false)}
-      />
+      {isAdminOpen && (
+        <React.Suspense fallback={null}>
+          <AdminModal />
+        </React.Suspense>
+      )}
 
       {/* Floating Direct WhatsApp Button */}
       <FloatingWhatsAppButton />
